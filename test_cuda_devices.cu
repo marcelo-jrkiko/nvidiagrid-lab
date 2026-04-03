@@ -32,7 +32,7 @@ int main() {
         std::cout << "  Max threads per block: " << prop.maxThreadsPerBlock << std::endl;
 
         maxThreads = maxThreads + prop.maxThreadsPerBlock;
-        maxMemory = maxMemory + prop.totalGlobalMem;
+        maxMemory = maxMemory + (prop.totalGlobalMem / (1024 * 1024));
 
         // Set current device
         cudaSetDevice(dev);
@@ -65,7 +65,7 @@ int main() {
         delete[] h_data;
     }
 
-    std::cout << "\nTotal max memory across all devices: " << maxMemory / (1024 * 1024) << " MB" << std::endl;
+    std::cout << "\nTotal max memory across all devices: " << maxMemory << " MB" << std::endl;
     std::cout << "\nTotal max threads across all devices: " << maxThreads << std::endl;
 
     return 0;
