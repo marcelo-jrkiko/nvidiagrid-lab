@@ -9,6 +9,9 @@ __global__ void testKernel(int *data) {
 
 int main() {
     int deviceCount = 0;
+    int maxThreads = 0;
+    int maxMemory = 0;
+
     cudaError_t err = cudaGetDeviceCount(&deviceCount);
 
     if (err != cudaSuccess) {
@@ -27,6 +30,9 @@ int main() {
         std::cout << "  Total global memory: " << prop.totalGlobalMem / (1024 * 1024) << " MB" << std::endl;
         std::cout << "  Multiprocessors: " << prop.multiProcessorCount << std::endl;
         std::cout << "  Max threads per block: " << prop.maxThreadsPerBlock << std::endl;
+
+        maxThreads = maxThreads + prop.maxThreadsPerBlock;
+        maxMemory = maxMemory + prop.totalGlobalMem;
 
         // Set current device
         cudaSetDevice(dev);
@@ -58,6 +64,9 @@ int main() {
         cudaFree(d_data);
         delete[] h_data;
     }
+
+    std::cout << "\nTotal max memory across all devices: " << maxMemory / (1024 * 1024) << " MB" << std::endl;
+    std::cout << "\nTotal max threads across all devices: " << maxThreads << std::endl;
 
     return 0;
 }
