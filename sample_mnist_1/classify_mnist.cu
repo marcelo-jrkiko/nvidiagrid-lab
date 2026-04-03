@@ -27,9 +27,9 @@ Config getConfig() {
     config.input_size = 784;   // 28x28 flattened
     config.output_size = 10;   // 10 digits
     
-    // Get preset from environment variable (default: LARGE)
+    // Get preset from environment variable (default: TINY)
     const char* preset_env = std::getenv("BATCH_PRESET");
-    std::string preset = preset_env ? std::string(preset_env) : "LARGE";
+    std::string preset = preset_env ? std::string(preset_env) : "TINY";
     
     // Convert to uppercase for comparison
     for (auto& c : preset) c = std::toupper(c);
