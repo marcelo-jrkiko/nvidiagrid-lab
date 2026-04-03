@@ -1,0 +1,19 @@
+# Caffe solver configuration for MNIST training on GRID K1
+# Medium impact: batch_size=128, 50 epochs
+
+net: "mnist_lenet.prototxt"
+test_iter: 100
+test_interval: 500
+base_lr: 0.01
+lr_policy: "step"
+gamma: 0.1
+stepsize: 5000
+display: 100
+max_iter: 50000
+momentum: 0.9
+weight_decay: 0.0005
+snapshot: 5000
+snapshot_prefix: "mnist_model"
+solver_mode: GPU
+device_id: 0
+random_seed: 1701
