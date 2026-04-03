@@ -3,7 +3,7 @@
 NVCC = nvcc
 CXX = g++
 CXXFLAGS = -std=c++11 -Wall
-NVCCFLAGS = -arch=sm_35 -std=c++11
+NVCCFLAGS = -ccbin /opt/gcc-5/bin/gcc -arch=sm_30 -std=c++11
 
 # CUDA paths
 CUDA_PATH ?= /usr/local/cuda
