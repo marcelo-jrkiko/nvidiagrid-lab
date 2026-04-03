@@ -68,3 +68,35 @@ GCC 5 will installed on /opt/gcc-5, now we can combine the cuda programs with NV
 ```
 nvcc -ccbin /opt/gcc-5/bin/gcc my_cuda_program.cu -o my_cuda_program
 ```
+
+## Python 3.7
+Debian 9 comes with Python 3.5 by default. To install Python 3.7, build it from source:
+
+### Install Build Dependencies
+```
+sudo apt-get install build-essential zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libssl-dev libreadline-dev libffi-dev wget
+```
+
+### Download and Build Python 3.7
+```
+wget https://www.python.org/ftp/python/3.7.17/Python-3.7.17.tgz
+tar -xzf Python-3.7.17.tgz
+cd Python-3.7.17
+./configure --prefix=/opt/python-3.7 --enable-optimizations
+make -j$(nproc)
+sudo make install
+```
+
+### Add Python 3.7 to PATH
+Add the following to the .bashrc:
+
+```
+export PATH=/opt/python-3.7/bin:$PATH
+```
+
+### Verify Installation
+```
+source ~/.bashrc
+python3.7 --version
+pip3.7 --version
+```

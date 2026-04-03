@@ -12,12 +12,16 @@ This sample demonstrates neural network training and inference for MNIST digit r
 
 ## Prerequisites
 
-```bash
-# On Debian 9
-sudo apt-get install caffe-cuda python-caffe
-sudo apt-get install cuda-toolkit
-```
+## Caffe, CUDA Toolkit and cuDNN
+Check the respective documents in the project tree to install the CUDA dependencies.
 
+
+### Create Virtual Environment with Python 3.7 and Install Libs
+```
+python3.7 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 ## Quick Start
 
 ### 1. Download MNIST Dataset
@@ -32,7 +36,8 @@ BATCH_PRESET=MEDIUM python train_mnist.py
 
 ### 3. Run Inference (CUDA)
 ```bash
-nvcc classify_mnist.cu -o classify_mnist
+make clean
+make all
 export BATCH_PRESET=MEDIUM
 ./classify_mnist
 ```
