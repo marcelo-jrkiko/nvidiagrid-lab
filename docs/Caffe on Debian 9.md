@@ -66,7 +66,15 @@ Edit `Makefile.config`:
 
 ```makefile
 INCLUDE_DIRS := $(PYTHON_INCLUDE) /usr/include/hdf5/serial /usr/include/opencv
-LD_LIBRARY_PATH := /usr/lib/x86_64-linux-gnu/hdf5/serial:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
+LIBRARY_DIRS := /usr/lib/x86_64-linux-gnu/hdf5/serial /usr/lib/x86_64-linux-gnu
+```
+
+Alternatively, set environment variables on .bashrc 
+
+```bash
+export CPATH=/usr/include/hdf5/serial:$CPATH
+export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu/hdf5/serial:$LD_LIBRARY_PATH
+export LIBRARY_PATH=/usr/lib/x86_64-linux-gnu/hdf5/serial:$LIBRARY_PATH
 ```
 
 ## Compile

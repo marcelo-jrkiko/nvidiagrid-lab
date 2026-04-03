@@ -49,9 +49,9 @@ Config getConfig() {
         config.batch_size = 128;
         config.hidden_size = 128;
     } else {
-        std::cerr << "Unknown preset: " << preset << std::endl;
-        std::cerr << "Valid presets: TINY, SMALL, MEDIUM, LARGE" << std::endl;
-        exit(1);
+        config.batch_size = 8;
+        config.hidden_size = 32;
+        std::cerr << "Unknown preset '" << preset << "'. Defaulting to TINY." << std::endl;
     }
     
     return config;
