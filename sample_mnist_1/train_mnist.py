@@ -25,8 +25,24 @@ from train_utils import (
     get_test_interval, print_gpu_config, print_training_config, cleanup_temp_files
 )
 
+from dotenv import load_dotenv
+load_dotenv()
+
+import logging  
+
+LOG_NAME = os.getenv('TRAINING_LOG', 'training.log')
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(LOG_NAME),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+
 # Global variable to hold the caffe utility path
-CAFFE_BIN = os.environ.get('CAFFE_BIN', '/usr/local/caffe/build/tools/caffe')
+CAFFE_BIN = os.getenv('CAFFE_BIN', '/usr/local/caffe/build/tools/caffe')
 
 def train_mnist_single_gpu(config, primary_gpu, patched_solver, patched_network):
     """Train on a single GPU (baseline)
@@ -54,7 +70,7 @@ def train_mnist_single_gpu(config, primary_gpu, patched_solver, patched_network)
         solver.step(1)
         
         if iteration % 100 == 0:
-            print("Iteration {}, Loss: {:.6f}".format(
+            logging.info("Iteration {}, Loss: {:.6f}".format(
                 iteration, 
                 solver.net.blobs['loss'].data
             ))
@@ -70,7 +86,7 @@ def train_mnist_single_gpu(config, primary_gpu, patched_solver, patched_network)
                 )
             
             accuracy = 100.0 * correct / 10000
-            print("Iteration {}, Test Accuracy: {:.2f}%".format(
+            logging.info("Iteration {}, Test Accuracy: {:.2f}%".format(
                 iteration, accuracy
             ))
     
@@ -96,9 +112,9 @@ def train_mnist_multi_gpu(config, gpu_list, patched_solver, patched_network):
     num_gpus = len(gpu_list)
     gpu_ids = ','.join(map(str, gpu_list))
     
-    print("Training model on GPUs: {} (parallel execution)".format(gpu_list))
-    print("Using Caffe CLI for true multi-GPU training")
-    print()
+    logging.info("Training model on GPUs: {} (parallel execution)".format(gpu_list))
+    logging.info("Using Caffe CLI for true multi-GPU training")
+    logging.info("")
     
     # Get max iterations from solver
     # Parse solver file to extract max_iter
@@ -120,38 +136,48 @@ def train_mnist_multi_gpu(config, gpu_list, patched_solver, patched_network):
         '-gpu', gpu_ids
     ]
     
-    print("Executing: {}".format(' '.join(cmd)))
-    print("-" * 60)
+    logging.info("Executing: {}".format(' '.join(cmd)))
+    logging.info("-" * 60)
     
     # Execute caffe training command
     try:
         start_time = time.time()
-        result = subprocess.run(
+        
+        # Start process asynchronously
+        process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             universal_newlines=True
         )
+        
+        # Read output in real-time and log it
+        for line in iter(process.stdout.readline, ''):
+            if line:
+                logging.info(line.rstrip('\n'))
+        
+        # Wait for process to complete
+        result = process.wait()
+        
         elapsed_time = time.time() - start_time
         
-        # Print the output from caffe
-        if result.stdout:
-            print(result.stdout)
-        
         # Check for errors
-        if result.returncode != 0:
-            print("Error: Caffe training failed with return code {}".format(result.returncode))
+        if result != 0:
+            # Log error output if training failed
+            error = process.stderr.read()            
+            logging.error("Caffe training failed with return code {}".format(result))
+            logging.error("Error output: {}".format(error))
             sys.exit(1)
         
-        print("-" * 60)
-        print("Multi-GPU training completed successfully")
+        logging.info("-" * 60)
+        logging.info("Multi-GPU training completed successfully")
         
     except FileNotFoundError:
-        print("Error: Caffe binary not found at '{}'".format(CAFFE_BIN))
-        print("Please ensure Caffe is installed and CAFFE_BIN environment variable is set correctly")
+        logging.error("Error: Caffe binary not found at '{}'".format(CAFFE_BIN))
+        logging.error("Please ensure Caffe is installed and CAFFE_BIN environment variable is set correctly")
         sys.exit(1)
     except Exception as e:
-        print("Error executing caffe training: {}".format(e))
+        logging.error("Error executing caffe training: {}".format(e))
         sys.exit(1)
     
     return elapsed_time, num_iterations
@@ -173,7 +199,7 @@ def save_training_results(results_dir, elapsed_time, num_iterations, config,
     # Create results directory if it doesn't exist
     if not os.path.exists(results_dir):
         os.makedirs(results_dir)
-        print("Created results directory: {}".format(results_dir))
+        logging.info("Created results directory: {}".format(results_dir))
     
     # Find and copy model snapshots and solverstates
     model_files = glob.glob(snapshot_prefix + "_iter_*.caffemodel")
@@ -183,7 +209,7 @@ def save_training_results(results_dir, elapsed_time, num_iterations, config,
         if os.path.exists(file_path):
             dest_path = os.path.join(results_dir, os.path.basename(file_path))
             shutil.copy2(file_path, dest_path)
-            print("Copied: {} -> {}".format(file_path, dest_path))
+            logging.info("Copied: {} -> {}".format(file_path, dest_path))
     
     # Create training summary file
     summary_file = os.path.join(results_dir, "training_summary.txt")
@@ -210,12 +236,12 @@ def save_training_results(results_dir, elapsed_time, num_iterations, config,
         f.write("Solver State Files: {}\n".format(len(state_files)))
         f.write("Results Directory: {}\n".format(results_dir))
     
-    print("\nTraining summary saved to: {}".format(summary_file))
-    print("\nTraining Statistics:")
-    print("  Total Time: {:.2f} seconds ({:.2f} minutes, {:.2f} hours)".format(
+    logging.info("\nTraining summary saved to: {}".format(summary_file))
+    logging.info("\nTraining Statistics:")
+    logging.info("  Total Time: {:.2f} seconds ({:.2f} minutes, {:.2f} hours)".format(
         elapsed_time, elapsed_time / 60.0, elapsed_time / 3600.0))
-    print("  Iterations: {}".format(num_iterations))
-    print("  Speed: {:.2f} iter/sec ({:.4f} sec/iter)".format(
+    logging.info("  Iterations: {}".format(num_iterations))
+    logging.info("  Speed: {:.2f} iter/sec ({:.4f} sec/iter)".format(
         num_iterations / elapsed_time, elapsed_time / num_iterations))
 
 
@@ -280,13 +306,13 @@ def train_mnist():
             snapshot_prefix
         )
     except Exception as e:
-        print("Error saving training results: {}".format(e))
+        logging.error("Error saving training results: {}".format(e))
         sys.exit(1)
     
     # Cleanup
-    print("-" * 60)
-    print("Training complete!")
-    print("Results saved to: {}".format(results_dir))
+    logging.info("-" * 60)
+    logging.info("Training complete!")
+    logging.info("Results saved to: {}".format(results_dir))
     cleanup_temp_files(patched_network, patched_solver)
 
 if __name__ == '__main__':
