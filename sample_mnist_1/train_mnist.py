@@ -162,9 +162,28 @@ def train_mnist():
     # Get configuration from preset
     config = get_config()
     
+    # Get GPU configuration from environment variables
+    gpu_ids_str = os.getenv("GPU_IDS", "0")
+    
+    # Parse GPU IDs (comma-separated)
+    try:
+        gpu_list = [int(x.strip()) for x in gpu_ids_str.split(',')]
+    except ValueError:
+        print("Warning: Invalid GPU_IDS format. Using GPU 0.")
+        gpu_list = [0]
+    
+    primary_gpu = gpu_list[0]
+    num_gpus = len(gpu_list)
+    
     # Configuration
     caffe.set_mode_gpu()
-    caffe.set_device(0)  # Use first GPU
+    caffe.set_device(primary_gpu)  # Use first GPU in list for primary computation
+    
+    print("GPU Configuration:")
+    print("  - GPU IDs: {}".format(gpu_list))
+    print("  - Primary GPU: {}".format(primary_gpu))
+    print("  - Total GPUs: {}".format(num_gpus))
+    print()
     
     # Patch prototxt files based on preset
     network_prototxt = 'mnist_lenet.prototxt'
@@ -192,8 +211,12 @@ def train_mnist():
         max(config.batch_size // 2, 8) if config.batch_size > 16 else config.batch_size
     ))
     print("Max iterations: {} iterations".format(solver.param.max_iter))
-    print("Device: GPU 0")
+    if num_gpus > 1:
+        print("Devices: GPUs {}".format(gpu_list))
+    else:
+        print("Device: GPU {}".format(primary_gpu))
     print("-" * 60)
+
     
     # Training loop
     niter = solver.param.max_iter
