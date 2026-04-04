@@ -1,5 +1,48 @@
 # CUDA 8.0 Tips to Install on Debian 9
 
+## Setup Archived Repositories
+
+Debian 9 (Stretch) reached end-of-life on June 30, 2022, and standard repositories are no longer maintained. Similarly, CUDA 8 is legacy. You must configure archived repositories to access packages.
+
+### Step 1: Update Debian Sources to Use Archives
+
+Edit `/etc/apt/sources.list`:
+
+```bash
+sudo nano /etc/apt/sources.list
+```
+
+Replace the standard Debian repositories with the archived ones. **Note:** `stretch-updates` is not available on the archive server, only the main `stretch` repository:
+
+```
+# Debian 9 Stretch - Archived Repositories
+deb http://archive.debian.org/debian stretch main contrib non-free
+deb http://security.debian.org/debian-security stretch/updates main contrib non-free
+```
+
+### Step 2: Accept Expired Signing Keys
+
+Since Debian 9 and its keys have expired, you need to allow unauthenticated packages:
+
+```bash
+sudo apt-get update -o Acquire::Check-Valid-Until=false --allow-unauthenticated
+```
+
+Or create a permanent configuration by editing `/etc/apt/apt.conf.d/99allow-archived`:
+
+```bash
+sudo tee /etc/apt/apt.conf.d/99allow-archived > /dev/null << 'EOF'
+Apt::Check-Valid-Until "false";
+Apt::Get::AllowUnauthenticated "true";
+EOF
+```
+
+Then update package lists:
+
+```bash
+sudo apt-get update
+```
+
 ## Driver and Cuda Install
 For GRID K1 and K2 , first download and install the NVIDIA DRIVER from the archived site:
 
@@ -74,7 +117,7 @@ Debian 9 comes with Python 3.5 by default. To install Python 3.7, build it from 
 
 ### Install Build Dependencies
 ```
-sudo apt-get install build-essential zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libssl-dev libreadline-dev libffi-dev wget libboost-python-dev
+sudo apt-get install build-essential zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libssl-dev libreadline-dev libffi-dev wget libboost-python-dev zip unzip
 ```
 
 ### Download and Build Python 3.7
