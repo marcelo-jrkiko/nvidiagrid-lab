@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Model Visualization - {{ model_name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <!-- Three.js for 3D visualization -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- WebDNN-like 3D visualization -->
+    <script src="{{ url_for('static', filename='three-utils.js') }}"></script>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-nav">
+                <a href="/" class="back-link">← Back to Models</a>
+                <h1>{{ model_name }}</h1>
+            </div>
+            <p>Network Architecture Visualization</p>
+        </header>
+
+        <main class="main">
+            <!-- Model Information Section -->
+            <section class="model-info-section">
+                <h2>Model Information</h2>
+                <div id="modelInfo" class="info-grid">
+                    <div class="loading">Loading model information...</div>
+                </div>
+            </section>
+
+            <!-- Visualization Tabs -->
+            <section class="visualization-section">
+                <div class="visualization-tabs">
+                    <button class="tab-button active" data-tab="2d">2D View</button>
+                    <button class="tab-button" data-tab="3d">3D View</button>
+                    <button class="tab-button" data-tab="ascii">ASCII Diagram</button>
+                </div>
+
+                <!-- 2D Visualization Tab -->
+                <div class="tab-content active" id="tab-2d">
+                    <h2>Network Layers (2D)</h2>
+                    <div id="visualization" class="visualization-container">
+                        <div class="loading">Loading visualization...</div>
+                    </div>
+                </div>
+
+                <!-- 3D Visualization Tab -->
+                <div class="tab-content" id="tab-3d">
+                    <h2>3D Network Architecture</h2>
+                    <div class="three-d-controls">
+                        <button onclick="resetCamera()">Reset Camera</button>
+                        <button onclick="toggleAutoRotate()">Toggle Auto-Rotate</button>
+                        <button onclick="exportVisualization()">Export</button>
+                        <label>
+                            <input type="checkbox" id="showLabels" checked onchange="toggleLabels()">
+                            Show Labels
+                        </label>
+                    </div>
+                    <div id="visualization3d" class="visualization-container-3d">
+                        <div class="loading-3d">Loading 3D visualization...</div>
+                    </div>
+                </div>
+
+                <!-- ASCII Diagram Tab -->
+                <div class="tab-content" id="tab-ascii">
+                    <h2>ASCII Diagram</h2>
+                    <pre id="asciiDiagram" class="ascii-diagram">
+                        <div class="loading">Loading diagram...</div>
+                    </pre>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <p>&copy; 2026 Caffe Model Visualizer | 3D Visualization powered by Three.js</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='visualization.js') }}"></script>
+</body>
+</html>

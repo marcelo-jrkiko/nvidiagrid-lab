@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Caffe Model Visualizer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>🧠 Caffe Model Visualizer</h1>
+            <p>Explore and visualize your Caffe neural network models</p>
+        </header>
+
+        <main class="main">
+            <!-- Models Folder Section -->
+            <section class="settings-section">
+                <h2>Settings</h2>
+                <div class="folder-selector">
+                    <label for="modelPath">Models Folder:</label>
+                    <input type="text" id="modelPath" placeholder="Enter models folder path" />
+                    <button onclick="setModelsFolder()">Set Folder</button>
+                </div>
+                <div id="folderStatus" class="status-message"></div>
+            </section>
+
+            <!-- Models List Section -->
+            <section class="models-section">
+                <h2>Available Models</h2>
+                <div id="modelsContainer" class="models-grid">
+                    <div class="loading">Loading models...</div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <p>&copy; 2026 Caffe Model Visualizer | Built with Flask</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
