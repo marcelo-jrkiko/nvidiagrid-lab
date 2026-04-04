@@ -103,20 +103,26 @@ def train_mnist_multi_gpu(config, gpu_list, patched_solver, patched_network):
     # Training loop with data parallelism
     for iteration in range(niter):
         # Forward + Backward on each GPU (with different data)
+        print("Iteration {}: Forward and Backward pass on each GPU...".format(iteration))
         for gpu_idx, solver in enumerate(solvers):
+            print("  GPU {}: Forward and Backward...".format(gpu_list[gpu_idx]))
             caffe.set_device(gpu_list[gpu_idx])
             solver.net.forward()  # Forward pass
             solver.net.backward()  # Backward pass (computes gradients)
         
         # Synchronize: average gradients across all GPUs
+        print("  Averaging gradients across GPUs...")
         average_net_diffs(solvers)
         
         # Apply averaged gradients: update weights on all GPUs
+        print("  Applying averaged gradients to update weights...")
         for gpu_idx, solver in enumerate(solvers):
             caffe.set_device(gpu_list[gpu_idx])
+            print("  GPU {}: Applying solver update...".format(gpu_list[gpu_idx]))
             solver.ApplySolverUpdate()  # Apply learning rate to averaged gradients
         
         # Average parameters to keep all GPUs in sync
+        print("  Averaging parameters across GPUs to keep in sync...")
         average_net_params(solvers)
         
         # Print progress (from primary GPU)
