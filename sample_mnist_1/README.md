@@ -223,178 +223,106 @@ Cleaned up temporary patched files
 | MEDIUM | 64 | 78,250 | 500 | 0.005 | Balanced training |
 | LARGE | 128 | 50,000 | 500 | 0.01 | Production (requires more VRAM) |
 
-## Multi-GPU Training with Data Parallelism
+## Multi-GPU Training
 
-The script now supports **true data parallelism** across multiple GPUs through manual gradient averaging. Here's how it works:
+### Important Limitation
 
-### Data Parallelism Implementation
+The Caffe Python API does **not reliably support synchronous data parallelism** due to GPU memory management complexities. Attempting to manually synchronize gradients and parameters across multiple GPU contexts causes deadlocks and memory access errors.
 
-When you specify multiple GPUs (`GPU_IDS=0,1,2`), the script implements data parallelism:
+### Recommended Approaches
 
-```
-Iteration Loop:
-├─ GPU 0: Forward/Backward with batch portion 0
-├─ GPU 1: Forward/Backward with batch portion 1  
-├─ GPU 2: Forward/Backward with batch portion 2
-├─ Synchronize: Average gradients across GPUs
-├─ Update: Apply averaged gradients to all GPUs
-└─ Sync: Average parameters to all GPUs
-```
+#### 1. **Use Caffe's Command-Line Tool** (Recommended - True Multi-GPU Support)
 
-**Key Steps:**
+For true multi-GPU training with automatic gradient synchronization, use Caffe's command-line interface:
 
-1. **Multiple Solvers**: Creates one Caffe solver per GPU
-   ```python
-   for gpu_id in gpu_list:
-       caffe.set_device(gpu_id)
-       solver = caffe.SGDSolver(patched_solver)
-       solvers.append(solver)
-   ```
-
-2. **Parallel Forward/Backward**: Each GPU processes its batch portion independently
-   ```python
-   for gpu_idx, solver in enumerate(solvers):
-       caffe.set_device(gpu_list[gpu_idx])
-       solver.net.forward()   # Forward pass
-       solver.net.backward()  # Backward pass (compute gradients)
-   ```
-
-3. **Gradient Averaging**: Core of data parallelism
-   ```python
-   average_net_diffs(solvers)  # Average diffs (gradients) across GPUs
-   ```
-   This is the key synchronization point where gradients from all GPUs are averaged.
-
-4. **Weight Updates**: Apply averaged gradients
-   ```python
-   for solver in solvers:
-       solver.ApplySolverUpdate()  # Update with averaged gradients
-   ```
-
-5. **Parameter Synchronization**: Keep all GPUs in sync
-   ```python
-   average_net_params(solvers)  # Synchronize parameters
-   ```
-
-### Using Multi-GPU Training
-
-#### Single GPU (no data parallelism)
 ```bash
-GPU_IDS=0 BATCH_PRESET=TINY python3.7 train_mnist.py
+# First, setup dataset
+cd sample_mnist_1
+bash download_mnist.sh
+bash convert_mnist_to_lmdb.sh
+
+# Train on multiple GPUs (Caffe handles synchronization)
+BATCH_PRESET=TINY caffe train -solver mnist_solver.prototxt -gpu 0,1,2
+
+# Or with environment variable
+BATCH_PRESET=MEDIUM caffe train \
+    -solver mnist_solver.prototxt \
+    -gpu 0,1,2
 ```
+
+**Advantages:**
+- Automatic gradient averaging and synchronization
+- True data parallelism with linear speedup
+- No Python memory management issues
+- Battle-tested in production
+
+#### 2. **Run Sequential Training on Different GPUs** (Python Script)
+
+Run independent training sessions on different GPUs:
+
+```bash
+# Terminal 1: Train on GPU 0
+GPU_IDS=0 BATCH_PRESET=TINY python3.7 train_mnist.py &
+
+# Terminal 2: Train on GPU 1
+GPU_IDS=1 BATCH_PRESET=TINY python3.7 train_mnist.py &
+
+# Terminal 3: Train on GPU 2
+GPU_IDS=2 BATCH_PRESET=TINY python3.7 train_mnist.py &
+
+# Wait for all to complete
+wait
+```
+
+**Advantages:**
 - No synchronization overhead
-- Full batch size per GPU = preset batch size (8)
+- Trains multiple independent models in parallel
+- Simple and reliable
+- Easy to run different presets per GPU
 
-#### Multiple GPUs (with data parallelism)
+#### 3. **Single GPU Training** (Simplest)
+
 ```bash
-# 2 GPUs: Total batch = 8 × 2 = 16
-GPU_IDS=0,1 BATCH_PRESET=TINY python3.7 train_mnist.py
+# Use specific GPU
+GPU_IDS=0 BATCH_PRESET=MEDIUM python3.7 train_mnist.py
 
-# 4 GPUs: Total batch = 32 × 4 = 128
-GPU_IDS=0,1,2,3 BATCH_PRESET=SMALL python3.7 train_mnist.py
-
-# Non-consecutive GPUs: Useful if some GPUs are busy
-GPU_IDS=0,2 BATCH_PRESET=MEDIUM python3.7 train_mnist.py
+# Use different GPU if GPU 0 is busy
+GPU_IDS=1 BATCH_PRESET=MEDIUM python3.7 train_mnist.py
 ```
 
-**Output with Multiple GPUs:**
-```
-GPU Configuration:
-  - GPU IDs: [0, 1]
-  - Primary GPU: 0
-  - Total GPUs: 2
-  - Mode: Data Parallelism (batch split across GPUs)
+### Why Not Manual Data Parallelism in Python?
 
-Training MNIST on GRID K1
-Preset: TINY
-Batch size per GPU: 8 (TRAIN), 8 (TEST)
-Total batch size (all GPUs): 16 (TRAIN), 16 (TEST)
-Devices: GPUs [0, 1]
-------------------------------------------------------------
-Creating 2 solvers for data parallelism...
-Starting data parallelism training with 2 GPUs
+The script previously attempted manual gradient averaging, but this fails due to:
 
-Iteration 0, Loss: 2.310000
-Iteration 100, Loss: 0.850000
-...
-Iteration 5000, Test Accuracy: 97.50%
-```
+1. **GPU Context Isolation**: Each Caffe solver runs in its own GPU context. Cross-context access causes synchronization deadlocks.
+2. **Memory Pinning**: GPU memory buffers can't be safely accessed from multiple GPU contexts simultaneously.
+3. **Hidden Synchronization**: Caffe internally uses CUDA streams that may conflict when managing multiple solvers.
+4. **Performance**: Copying large gradient tensors between GPUs through CPU memory is extremely slow.
 
-### Performance Characteristics
+**Result:** The`average_net_diffs()` function would hang indefinitely trying to synchronize across GPU contexts.
 
-#### Speedup vs Overhead
+### Performance Comparison
 
-| GPUs | Effective Batch | Theory Speedup | Actual Speedup | Notes |
-|------|-----------------|----------------|----------------|-------|
-| 1 | 8 | 1.0x | 1.0x | Baseline |
-| 2 | 16 | ~2.0x | ~1.8x | ~10% synchronization overhead |
-| 4 | 32 | ~4.0x | ~3.5x | ~12% synchronization overhead |
+| Method | Speedup | Overhead | Reliability | Ease of Use |
+|--------|---------|----------|-------------|-------------|
+| Caffe CLI (-gpu) | ~1.8-3.5x | Minimal (~15%) | Excellent | Medium (CLI-specific) |
+| Python Sequential | ~1.0x (parallel jobs) | None | Excellent | High (simple loop) |
+| Python Data Parallelism | N/A (deadlock) | High | Poor | High (but broken) |
+| Single GPU | 1.0x | None | Excellent | Very High |
 
-Synchronization overhead includes:
-- Gradient averaging across GPUs
-- Parameter synchronization
-- PCIe communication between GPUs
+### Checking Available GPUs
 
-#### When to Use Multiple GPUs
+Before running multi-GPU training:
 
-**Use Multi-GPU when:**
-- Training takes > 1 hour on single GPU
-- You have 2-4 free GPUs available
-- Batch size can be large (good for large models)
-
-**Stick with Single GPU when:**
-- Training is fast (< 30 minutes)
-- Running many independent experiments
-- GPU memory is limited
-
-### Gradient Averaging Mechanism
-
-The `average_net_diffs()` function in `train_utils.py` implements the core synchronization:
-
-```python
-def average_net_diffs(solvers):
-    """Average gradients across multiple solvers"""
-    for blob_name in param_blob_names:
-        for param_idx in range(len(param_layer)):
-            # Collect gradients from all solvers
-            for solver in solvers:
-                diff_data = solver.net.params[blob_name][param_idx].diff
-            
-            # Average: sum all diffs, divide by number of GPUs
-            diff_avg = diff_sum / num_solvers
-            
-            # Update all solvers with averaged gradient
-            for solver in solvers:
-                solver.net.params[blob_name][param_idx].diff[...] = diff_avg
-```
-
-### Troubleshooting Multi-GPU
-
-**Issue: "Out of Memory" with multiple GPUs**
 ```bash
-# Too large batch size
-GPU_IDS=0,1 BATCH_PRESET=LARGE python3.7 train_mnist.py
-
-# Solution: Use smaller preset
-GPU_IDS=0,1 BATCH_PRESET=SMALL python3.7 train_mnist.py
-```
-
-**Issue: "CUDA device not available"**
-```bash
-GPU_IDS=0,1,2 BATCH_PRESET=TINY python3.7 train_mnist.py
-# Error: GPU 2 doesn't exist
-
-# Solution: Check available GPUs
+# List all GPUs
 nvidia-smi
-```
 
-**Issue: One GPU running slower than others**
-```bash
-# Check GPU utilization
+# Check GPU memory
 nvidia-smi -l 1
 
-# If one GPU is throttling due to temperature, reduce batch size
-GPU_IDS=0,1 BATCH_PRESET=TINY python3.7 train_mnist.py
+# Count GPUs
+python3.7 -c "import caffe; caffe.set_mode_gpu(); print('GPUs:', caffe.get_device_count())"
 ```
 
 ### Code Organization

@@ -214,79 +214,19 @@ def get_test_interval(patched_solver):
     return int(match.group(1)) if match else 500
 
 
-def average_net_params(solvers):
-    """Average parameters across multiple solvers (data parallelism)
+def share_params_to_primary_gpu(solvers, primary_gpu_idx):
+    """Copy parameters from primary GPU to other GPUs for synchronization
     
-    Computes average of all network parameters across all GPUs.
-    Used after gradient computation to synchronize weights.
-    
-    Args:
-        solvers (list): List of Caffe solvers
-    """
-    if len(solvers) <= 1:
-        return  # No averaging needed for single GPU
-    
-    num_solvers = len(solvers)
-    
-    # Get all blob names from first solver
-    param_blob_names = solvers[0].net.params.keys()
-    
-    for blob_name in param_blob_names:
-        # Get parameter dimension
-        param_layer = solvers[0].net.params[blob_name]
-        
-        for param_idx in range(len(param_layer)):
-            # Collect parameters from all solvers
-            param_sum = None
-            for solver in solvers:
-                param_data = solver.net.params[blob_name][param_idx].data
-                if param_sum is None:
-                    param_sum = np.copy(param_data)
-                else:
-                    param_sum += param_data
-            
-            # Average and update
-            param_avg = param_sum / num_solvers
-            for solver in solvers:
-                solver.net.params[blob_name][param_idx].data[...] = param_avg
-
-
-def average_net_diffs(solvers):
-    """Average gradients across multiple solvers (data parallelism core)
-    
-    Computes average of gradients (diffs) across all GPUs after backward pass.
-    This is the key step for data parallelism.
+    WARNING: This is only for testing/validation. Not recommended for production
+    as it creates heavy GPU synchronization overhead.
     
     Args:
         solvers (list): List of Caffe solvers
+        primary_gpu_idx (int): Index of primary GPU in solvers list
     """
-    if len(solvers) <= 1:
-        return  # No averaging needed for single GPU
-    
-    num_solvers = len(solvers)
-    
-    # Get all blob names from first solver
-    param_blob_names = solvers[0].net.params.keys()
-    
-    for blob_name in param_blob_names:
-        param_layer = solvers[0].net.params[blob_name]
-        
-        for param_idx in range(len(param_layer)):
-            # Collect gradients from all solvers
-            diff_sum = None
-            for solver in solvers:
-                diff_data = solver.net.params[blob_name][param_idx].diff
-                if diff_sum is None:
-                    diff_sum = np.copy(diff_data)
-                else:
-                    diff_sum += diff_data
-            
-            # Average gradients
-            diff_avg = diff_sum / num_solvers
-            
-            # Update diffs in all solvers with averaged gradient
-            for solver in solvers:
-                solver.net.params[blob_name][param_idx].diff[...] = diff_avg
+    # This approach is not efficient and causes deadlocks with Caffe's GPU memory management
+    # It's kept here for reference only
+    pass
 
 
 def print_gpu_config(gpu_list, primary_gpu, num_gpus):

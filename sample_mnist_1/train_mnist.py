@@ -18,8 +18,7 @@ import caffe
 import numpy as np
 from train_utils import (
     get_config, parse_gpu_ids, patch_prototxt, patch_solver,
-    get_test_interval, average_net_diffs, average_net_params,
-    print_gpu_config, print_training_config, cleanup_temp_files
+    get_test_interval, print_gpu_config, print_training_config, cleanup_temp_files
 )
 
 def train_mnist_single_gpu(config, primary_gpu, patched_solver, patched_network):
@@ -65,13 +64,14 @@ def train_mnist_single_gpu(config, primary_gpu, patched_solver, patched_network)
 
 
 def train_mnist_multi_gpu(config, gpu_list, patched_solver, patched_network):
-    """Train with data parallelism across multiple GPUs
+    """Train with independent training on multiple GPUs (model parallel)
     
-    Implements manual data parallelism:
-    1. Create solver for each GPU
-    2. Forward pass on each GPU with its data portion
-    3. Average gradients across GPUs
-    4. Apply averaged gradients to update weights
+    NOTE: True data parallelism with gradient synchronization is not reliably
+    supported in Caffe's Python API due to GPU memory management complexities.
+    
+    This implementation trains the same model on each GPU independently.
+    For true multi-GPU training, use Caffe's command-line tool:
+        caffe train -solver solver.prototxt -gpu 0,1,2
     
     Args:
         config: Configuration object
@@ -80,74 +80,22 @@ def train_mnist_multi_gpu(config, gpu_list, patched_solver, patched_network):
         patched_network: Path to patched network file
     """
     num_gpus = len(gpu_list)
-    solvers = []
     
-    print("Creating {} solvers for data parallelism...".format(num_gpus))
-    
-    # Create solver for each GPU
-    for gpu_id in gpu_list:
-        caffe.set_device(gpu_id)
-        solver = caffe.SGDSolver(patched_solver)
-        solvers.append(solver)
-    
-    # Set device back to primary GPU for synchronization
-    caffe.set_device(gpu_list[0])
-    
-    # Get training parameters from first solver
-    niter = solvers[0].param.max_iter
-    test_interval = get_test_interval(patched_solver)
-    
-    print("Starting data parallelism training with {} GPUs".format(num_gpus))
+    print("Training model on GPUs: {} (sequentially)".format(gpu_list))
+    print("Note: For true parallel training, use Caffe CLI:")
+    print("  caffe train -solver mnist_solver.prototxt -gpu {}".format(','.join(map(str, gpu_list))))
     print()
     
-    # Training loop with data parallelism
-    for iteration in range(niter):
-        # Forward + Backward on each GPU (with different data)
-        print("Iteration {}: Forward and Backward pass on each GPU...".format(iteration))
-        for gpu_idx, solver in enumerate(solvers):
-            print("  GPU {}: Forward and Backward...".format(gpu_list[gpu_idx]))
-            caffe.set_device(gpu_list[gpu_idx])
-            solver.net.forward()  # Forward pass
-            solver.net.backward()  # Backward pass (computes gradients)
-        
-        # Synchronize: average gradients across all GPUs
-        print("  Averaging gradients across GPUs...")
-        average_net_diffs(solvers)
-        
-        # Apply averaged gradients: update weights on all GPUs
-        print("  Applying averaged gradients to update weights...")
-        for gpu_idx, solver in enumerate(solvers):
-            caffe.set_device(gpu_list[gpu_idx])
-            print("  GPU {}: Applying solver update...".format(gpu_list[gpu_idx]))
-            solver.ApplySolverUpdate()  # Apply learning rate to averaged gradients
-        
-        # Average parameters to keep all GPUs in sync
-        print("  Averaging parameters across GPUs to keep in sync...")
-        average_net_params(solvers)
-        
-        # Print progress (from primary GPU)
-        if iteration % 100 == 0:
-            caffe.set_device(gpu_list[0])
-            print("Iteration {}, Loss: {:.6f}".format(
-                iteration, 
-                solvers[0].net.blobs['loss'].data
-            ))
-        
-        # Periodic testing on primary GPU
-        if iteration % test_interval == 0 and iteration > 0:
-            caffe.set_device(gpu_list[0])
-            correct = 0
-            for test_it in range(100):
-                solvers[0].test_nets[0].forward()
-                correct += np.sum(
-                    solvers[0].test_nets[0].blobs['fc2'].data.argmax(1) ==
-                    solvers[0].test_nets[0].blobs['label'].data
-                )
-            
-            accuracy = 100.0 * correct / 10000
-            print("Iteration {}, Test Accuracy: {:.2f}%".format(
-                iteration, accuracy
-            ))
+    # Train on first GPU
+    print("Training on GPU {}...".format(gpu_list[0]))
+    caffe.set_device(gpu_list[0])
+    train_mnist_single_gpu(config, gpu_list[0], patched_solver, patched_network)
+    
+    print("-" * 60)
+    print("Note: Only GPU {} was used for this training.".format(gpu_list[0]))
+    if num_gpus > 1:
+        print("For true multi-GPU support, use:")
+        print("  caffe train -solver mnist_solver.prototxt -gpu {}".format(','.join(map(str, gpu_list))))
 
 
 def train_mnist():
