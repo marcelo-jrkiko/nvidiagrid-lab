@@ -85,15 +85,15 @@ ls -lh build/include/
 #### nstall NCCL to System Paths
 
 ```bash
-cd ~/nccl-build/nccl-2.4.8-1
+cd build
 
 # Install headers
 sudo cp -r include/nccl.h /usr/local/cuda/include/
 sudo cp -r include/nccl_net.h /usr/local/cuda/include/ 2>/dev/null || true
 
 # Install libraries
-sudo cp build/lib/libnccl.so* /usr/local/cuda/lib64/
-sudo cp build/lib/libnccl_static.a /usr/local/cuda/lib64/
+sudo cp lib/libnccl.so* /usr/local/cuda/lib64/
+sudo cp lib/libnccl_static.a /usr/local/cuda/lib64/
 
 # Update library cache
 sudo ldconfig
@@ -184,7 +184,7 @@ source ~/.bashrc
 ## Compile
 
 ```bash
-mkdir build && cd build
+CC=/opt/gcc-5/bin/gcc CXX=/opt/gcc-5/bin/g++ make clean 
 CC=/opt/gcc-5/bin/gcc CXX=/opt/gcc-5/bin/g++ make all -j$(nproc)
 CC=/opt/gcc-5/bin/gcc CXX=/opt/gcc-5/bin/g++ make pycaffe
 CC=/opt/gcc-5/bin/gcc CXX=/opt/gcc-5/bin/g++ make examples
