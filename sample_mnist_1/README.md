@@ -31,7 +31,7 @@ bash download_mnist.sh
 
 ### 2. Train Model (Python + Caffe)
 ```bash
-BATCH_PRESET=MEDIUM python train_mnist.py
+BATCH_PRESET=TINY python train_mnist.py
 ```
 
 ### 3. Run Inference (CUDA)

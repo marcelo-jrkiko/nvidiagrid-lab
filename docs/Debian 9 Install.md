@@ -74,7 +74,7 @@ Debian 9 comes with Python 3.5 by default. To install Python 3.7, build it from 
 
 ### Install Build Dependencies
 ```
-sudo apt-get install build-essential zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libssl-dev libreadline-dev libffi-dev wget
+sudo apt-get install build-essential zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libssl-dev libreadline-dev libffi-dev wget libboost-python-dev
 ```
 
 ### Download and Build Python 3.7
@@ -82,16 +82,9 @@ sudo apt-get install build-essential zlib1g-dev libncurses5-dev libgdbm-dev libn
 wget https://www.python.org/ftp/python/3.7.17/Python-3.7.17.tgz
 tar -xzf Python-3.7.17.tgz
 cd Python-3.7.17
-./configure --prefix=/opt/python-3.7 --enable-optimizations
-make -j$(nproc)
-sudo make install
-```
-
-### Add Python 3.7 to PATH
-Add the following to the .bashrc:
-
-```
-export PATH=/opt/python-3.7/bin:$PATH
+CFLAGS=-fPIC ./configure --enable-optimizations
+make -i -j$(nproc) PROFILE_TASK=
+sudo make altinstall
 ```
 
 ### Verify Installation
@@ -99,4 +92,37 @@ export PATH=/opt/python-3.7/bin:$PATH
 source ~/.bashrc
 python3.7 --version
 pip3.7 --version
+```
+
+## Boost.Python 3.7
+Since Python 3.7 is installed as an alternative, you need to build Boost.Python from source for that specific Python installation:
+
+### Download and Extract Boost
+```bash
+cd /tmp
+wget https://archives.boost.io/release/1.72.0/source/boost_1_72_0.tar.gz
+tar -xzf boost_1_72_0.tar.gz
+cd boost_1_72_0
+```
+
+### Bootstrap and Build Boost.Python
+```bash
+# Set the GCC 5 compiler from previous steps
+export CC=/opt/gcc-5/bin/gcc
+export CXX=/opt/gcc-5/bin/g++
+
+# Create user-config.jam to specify Python configuration
+cat > ~/user-config.jam << 'EOF'
+using python : 3.7 : /usr/bin/python3.7 : /usr/local/include/python3.7m : /usr/local/lib/python3.7 ;
+using gcc : 5 : /opt/gcc-5/bin/g++ ;
+EOF
+
+./bootstrap.sh --prefix=/usr/local/lib/boost_1_72_0 --with-libraries=python,thread
+
+./b2 --with-python --with-thread toolset=gcc-5 variant=release link=shared runtime-link=shared install
+```
+
+### Verify Boost.Python Installation
+```bashnani
+ls /usr/local/lib/boost_1_72_0/lib/libboost_python3*
 ```

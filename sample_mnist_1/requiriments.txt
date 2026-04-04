@@ -2,3 +2,4 @@ scikit-image
 pillow 
 protobuf
 dotenv
+six
