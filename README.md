@@ -7,7 +7,9 @@ This project is a collection of small projects I created during this homelab wit
 
 Here I explore running small algorithms within the GPUs, as well as training small neural networks and visualizing the models obtained from these trainings, exploring MNIST a bit, and other approaches.
 
-*PS:* Yes, I did use AI to help me develop these projects and, most importantly, to document and organize the entire homelab setup process, testing, and how I ran each of the algorithms and SNNs.
+> PS: Yes, I did use AI to help me develop these projects and, most importantly, to document and organize the entire homelab setup process, testing, and how I ran each of the algorithms and SNNs.
+
+>> My objective isnt to be a neural scientist , its just to explore the hardware and in the process learn something new that can aggreate to my very very small knoweldge about AIs and Neural Networks. Maybe this repo can help another crazy guy like me.
 
 ## Project Overview
 NVIDIA Grid Lab is a comprehensive laboratory environment designed for deep learning experimentation and visualization. This project provides tools and utilities for training, analyzing, and visualizing neural network models, with a particular focus on image classification tasks using popular deep learning frameworks.
