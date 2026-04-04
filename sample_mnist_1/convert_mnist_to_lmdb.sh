@@ -14,7 +14,7 @@ fi
 # Find convert_mnist_data binary
 # It's an example program that needs to be built from caffe/examples/mnist/convert_mnist_data.cpp
 CAFFE_ROOT="/usr/local/caffe"  # Change this to your Caffe root directory if different
-CONVERT_TOOL="$CAFFE_ROOT/build/examples/mnist/convert_mnist_data"
+CONVERT_TOOL="$CAFFE_ROOT/build/examples/mnist/convert_mnist_data.bin"
 
 if [ ! -f "$CONVERT_TOOL" ]; then
     echo "Error: convert_mnist_data binary not found at $CONVERT_TOOL"
