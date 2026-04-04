@@ -197,7 +197,17 @@ def train_mnist():
     
     # Training loop
     niter = solver.param.max_iter
-    test_interval = solver.param.test_interval
+    
+    # Get test_interval from solver param, with fallback to reading from file
+    try:
+        test_interval = solver.param.test_interval
+    except AttributeError:
+        # Fallback: read test_interval from solver file
+        with open(patched_solver, 'r') as f:
+            solver_content = f.read()
+        match = re.search(r'test_interval:\s*(\d+)', solver_content)
+        test_interval = int(match.group(1)) if match else 500
+        print("Note: test_interval read from solver file: {}".format(test_interval))
     
     for iteration in range(niter):
         solver.step(1)
