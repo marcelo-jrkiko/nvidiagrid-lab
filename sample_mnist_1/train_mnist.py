@@ -4,10 +4,17 @@ MNIST Training Script for GRID K1
 Trains a LeNet CNN model on MNIST dataset with batch size preset configuration
 """
 
+import sys
+import os
+
+# Remove current directory from sys.path before importing caffe to avoid protobuf conflicts
+if '' in sys.path:
+    sys.path.remove('')
+if os.getcwd() in sys.path:
+    sys.path.remove(os.getcwd())
+
 import caffe
 import numpy as np
-import os
-import sys
 import re
 import shutil
 

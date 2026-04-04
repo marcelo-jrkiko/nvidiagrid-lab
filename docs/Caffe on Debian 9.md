@@ -113,4 +113,25 @@ Check if the _caffe.so is compiled with python 3.7
 
 ```
 ldd /usr/local/caffe/python/caffe/_caffe.so | grep python
-``
+```
+
+## Troubleshooting
+
+### TypeError: Couldn't build proto file into descriptor pool: duplicate file name caffe/proto/caffe.proto
+
+This error occurs when protobuf modules are imported multiple times or there's a conflict between different protobuf versions. Solutions:
+
+1. **Clean rebuild Caffe:**
+```bash
+cd /usr/local/caffe
+CC=/opt/gcc-5/bin/gcc CXX=/opt/gcc-5/bin/g++ make clean
+CC=/opt/gcc-5/bin/gcc CXX=/opt/gcc-5/bin/g++ make all -j$(nproc)
+CC=/opt/gcc-5/bin/gcc CXX=/opt/gcc-5/bin/g++ make pycaffe
+```
+
+2. **Verify Python can find Caffe modules:**
+```bash
+python3.7 -c "import sys; print(sys.path)" | grep caffe
+```
+
+3. **If using Caffe in interactive Python, restart the interpreter** after rebuilding, as protobuf descriptors can persist in memory.
