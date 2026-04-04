@@ -7,6 +7,10 @@ and manual data parallelism across multiple GPUs.
 
 import sys
 import os
+import time
+import shutil
+import glob
+import subprocess
 
 # Remove current directory from sys.path before importing caffe to avoid protobuf conflicts
 if '' in sys.path:
@@ -21,6 +25,9 @@ from train_utils import (
     get_test_interval, print_gpu_config, print_training_config, cleanup_temp_files
 )
 
+# Global variable to hold the caffe utility path
+CAFFE_BIN = os.environ.get('CAFFE_BIN', '/usr/local/caffe/build/tools/caffe')
+
 def train_mnist_single_gpu(config, primary_gpu, patched_solver, patched_network):
     """Train on a single GPU (baseline)
     
@@ -29,7 +36,12 @@ def train_mnist_single_gpu(config, primary_gpu, patched_solver, patched_network)
         primary_gpu: GPU ID to use
         patched_solver: Path to patched solver file
         patched_network: Path to patched network file
+        
+    Returns:
+        Tuple of (training_time_seconds, num_iterations)
     """
+    start_time = time.time()
+    
     # Create solver
     solver = caffe.SGDSolver(patched_solver)
     
@@ -61,41 +73,150 @@ def train_mnist_single_gpu(config, primary_gpu, patched_solver, patched_network)
             print("Iteration {}, Test Accuracy: {:.2f}%".format(
                 iteration, accuracy
             ))
+    
+    elapsed_time = time.time() - start_time
+    return elapsed_time, niter
 
 
 def train_mnist_multi_gpu(config, gpu_list, patched_solver, patched_network):
-    """Train with independent training on multiple GPUs (model parallel)
+    """Train with parallel training on multiple GPUs using Caffe CLI
     
-    NOTE: True data parallelism with gradient synchronization is not reliably
-    supported in Caffe's Python API due to GPU memory management complexities.
-    
-    This implementation trains the same model on each GPU independently.
-    For true multi-GPU training, use Caffe's command-line tool:
-        caffe train -solver solver.prototxt -gpu 0,1,2
+    This implementation uses the Caffe command-line tool to achieve true
+    multi-GPU training with parallel execution across all specified GPUs.
     
     Args:
         config: Configuration object
         gpu_list: List of GPU IDs to use
         patched_solver: Path to patched solver file
         patched_network: Path to patched network file
+        
+    Returns:
+        Tuple of (training_time_seconds, num_iterations)
     """
     num_gpus = len(gpu_list)
+    gpu_ids = ','.join(map(str, gpu_list))
     
-    print("Training model on GPUs: {} (sequentially)".format(gpu_list))
-    print("Note: For true parallel training, use Caffe CLI:")
-    print("  caffe train -solver mnist_solver.prototxt -gpu {}".format(','.join(map(str, gpu_list))))
+    print("Training model on GPUs: {} (parallel execution)".format(gpu_list))
+    print("Using Caffe CLI for true multi-GPU training")
     print()
     
-    # Train on first GPU
-    print("Training on GPU {}...".format(gpu_list[0]))
-    caffe.set_device(gpu_list[0])
-    train_mnist_single_gpu(config, gpu_list[0], patched_solver, patched_network)
+    # Get max iterations from solver
+    # Parse solver file to extract max_iter
+    num_iterations = None
+    with open(patched_solver, 'r') as f:
+        for line in f:
+            if 'max_iter' in line:
+                num_iterations = int(line.split(':')[1].strip())
+                break
     
+    if num_iterations is None:
+        num_iterations = 50000  # Default fallback
+    
+    # Build caffe train command
+    cmd = [
+        CAFFE_BIN,
+        'train',
+        '-solver', patched_solver,
+        '-gpu', gpu_ids
+    ]
+    
+    print("Executing: {}".format(' '.join(cmd)))
     print("-" * 60)
-    print("Note: Only GPU {} was used for this training.".format(gpu_list[0]))
-    if num_gpus > 1:
-        print("For true multi-GPU support, use:")
-        print("  caffe train -solver mnist_solver.prototxt -gpu {}".format(','.join(map(str, gpu_list))))
+    
+    # Execute caffe training command
+    try:
+        start_time = time.time()
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            universal_newlines=True
+        )
+        elapsed_time = time.time() - start_time
+        
+        # Print the output from caffe
+        if result.stdout:
+            print(result.stdout)
+        
+        # Check for errors
+        if result.returncode != 0:
+            print("Error: Caffe training failed with return code {}".format(result.returncode))
+            sys.exit(1)
+        
+        print("-" * 60)
+        print("Multi-GPU training completed successfully")
+        
+    except FileNotFoundError:
+        print("Error: Caffe binary not found at '{}'".format(CAFFE_BIN))
+        print("Please ensure Caffe is installed and CAFFE_BIN environment variable is set correctly")
+        sys.exit(1)
+    except Exception as e:
+        print("Error executing caffe training: {}".format(e))
+        sys.exit(1)
+    
+    return elapsed_time, num_iterations
+
+
+def save_training_results(results_dir, elapsed_time, num_iterations, config, 
+                          primary_gpu, patched_solver, snapshot_prefix):
+    """Save training results and model snapshots to results directory
+    
+    Args:
+        results_dir: Path to results directory
+        elapsed_time: Training time in seconds
+        num_iterations: Number of training iterations
+        config: Configuration object
+        primary_gpu: Primary GPU used
+        patched_solver: Path to patched solver file
+        snapshot_prefix: Prefix for model snapshots
+    """
+    # Create results directory if it doesn't exist
+    if not os.path.exists(results_dir):
+        os.makedirs(results_dir)
+        print("Created results directory: {}".format(results_dir))
+    
+    # Find and copy model snapshots and solverstates
+    model_files = glob.glob(snapshot_prefix + "_iter_*.caffemodel")
+    state_files = glob.glob(snapshot_prefix + "_iter_*.solverstate")
+    
+    for file_path in model_files + state_files:
+        if os.path.exists(file_path):
+            dest_path = os.path.join(results_dir, os.path.basename(file_path))
+            shutil.copy2(file_path, dest_path)
+            print("Copied: {} -> {}".format(file_path, dest_path))
+    
+    # Create training summary file
+    summary_file = os.path.join(results_dir, "training_summary.txt")
+    with open(summary_file, 'w') as f:
+        f.write("MNIST Training Results Summary\n")
+        f.write("=" * 60 + "\n\n")
+        f.write("Training Configuration\n")
+        f.write("-" * 60 + "\n")
+        f.write("Preset: {}\n".format(config.preset))
+        f.write("Primary GPU: {}\n".format(primary_gpu))
+        f.write("Max Iterations: {}\n".format(num_iterations))
+        f.write("\n")
+        f.write("Training Results\n")
+        f.write("-" * 60 + "\n")
+        f.write("Total Training Time: {:.2f} seconds\n".format(elapsed_time))
+        f.write("Total Training Time: {:.2f} minutes\n".format(elapsed_time / 60.0))
+        f.write("Total Training Time: {:.2f} hours\n".format(elapsed_time / 3600.0))
+        f.write("Iterations per second: {:.2f}\n".format(num_iterations / elapsed_time))
+        f.write("Seconds per iteration: {:.4f}\n".format(elapsed_time / num_iterations))
+        f.write("\n")
+        f.write("Output Files\n")
+        f.write("-" * 60 + "\n")
+        f.write("Model Files: {}\n".format(len(model_files)))
+        f.write("Solver State Files: {}\n".format(len(state_files)))
+        f.write("Results Directory: {}\n".format(results_dir))
+    
+    print("\nTraining summary saved to: {}".format(summary_file))
+    print("\nTraining Statistics:")
+    print("  Total Time: {:.2f} seconds ({:.2f} minutes, {:.2f} hours)".format(
+        elapsed_time, elapsed_time / 60.0, elapsed_time / 3600.0))
+    print("  Iterations: {}".format(num_iterations))
+    print("  Speed: {:.2f} iter/sec ({:.4f} sec/iter)".format(
+        num_iterations / elapsed_time, elapsed_time / num_iterations))
 
 
 def train_mnist():
@@ -137,17 +258,35 @@ def train_mnist():
     # Train based on GPU count
     try:
         if num_gpus == 1:
-            train_mnist_single_gpu(config, primary_gpu, patched_solver, patched_network)
+            elapsed_time, num_iterations = train_mnist_single_gpu(config, primary_gpu, patched_solver, patched_network)
         else:
-            train_mnist_multi_gpu(config, gpu_list, patched_solver, patched_network)
+            elapsed_time, num_iterations = train_mnist_multi_gpu(config, gpu_list, patched_solver, patched_network)
     except Exception as e:
         print("Error during training: {}".format(e))
+        sys.exit(1)
+    
+    # Save results to results folder
+    results_dir = os.path.join(os.getcwd(), 'results')
+    snapshot_prefix = 'mnist_model'
+    
+    try:
+        save_training_results(
+            results_dir, 
+            elapsed_time, 
+            num_iterations, 
+            config, 
+            primary_gpu, 
+            patched_solver, 
+            snapshot_prefix
+        )
+    except Exception as e:
+        print("Error saving training results: {}".format(e))
         sys.exit(1)
     
     # Cleanup
     print("-" * 60)
     print("Training complete!")
-    print("Model saved as mnist_model_iter_*.caffemodel")
+    print("Results saved to: {}".format(results_dir))
     cleanup_temp_files(patched_network, patched_solver)
 
 if __name__ == '__main__':
