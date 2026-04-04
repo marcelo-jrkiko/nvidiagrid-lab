@@ -11,11 +11,18 @@ if [ ! -d "$MNIST_DIR" ]; then
     exit 1
 fi
 
-# Check if Caffe convert_mnist_data binary exists
-if ! command -v convert_mnist_data &> /dev/null; then
-    echo "Error: convert_mnist_data utility not found."
-    echo "Make sure Caffe is built and convert_mnist_data is in your PATH"
-    echo "It's typically in: /path/to/caffe/build/tools/convert_mnist_data"
+# Find convert_mnist_data binary
+# It's an example program that needs to be built from caffe/examples/mnist/convert_mnist_data.cpp
+CAFFE_ROOT="${CAFFE_ROOT:-.}"
+CONVERT_TOOL="$CAFFE_ROOT/build/examples/mnist/convert_mnist_data"
+
+if [ ! -f "$CONVERT_TOOL" ]; then
+    echo "Error: convert_mnist_data binary not found at $CONVERT_TOOL"
+    echo "Please build it first:"
+    echo "  cd $CAFFE_ROOT/build"
+    echo "  make examples"
+    echo "Or specify CAFFE_ROOT:"
+    echo "  CAFFE_ROOT=/path/to/caffe ./convert_mnist_to_lmdb.sh"
     exit 1
 fi
 
@@ -23,13 +30,13 @@ fi
 mkdir -p "$LMDB_DIR"
 
 echo "Converting MNIST training data to LMDB format..."
-convert_mnist_data \
+"$CONVERT_TOOL" \
     "$MNIST_DIR/train-images-idx3-ubyte" \
     "$MNIST_DIR/train-labels-idx1-ubyte" \
     "$LMDB_DIR/mnist_train_lmdb"
 
 echo "Converting MNIST test data to LMDB format..."
-convert_mnist_data \
+"$CONVERT_TOOL" \
     "$MNIST_DIR/t10k-images-idx3-ubyte" \
     "$MNIST_DIR/t10k-labels-idx1-ubyte" \
     "$LMDB_DIR/mnist_test_lmdb"

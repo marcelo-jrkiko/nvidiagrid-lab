@@ -99,7 +99,10 @@ source ~/.bashrc
 mkdir build && cd build
 CC=/opt/gcc-5/bin/gcc CXX=/opt/gcc-5/bin/g++ make all -j$(nproc)
 CC=/opt/gcc-5/bin/gcc CXX=/opt/gcc-5/bin/g++ make pycaffe
+CC=/opt/gcc-5/bin/gcc CXX=/opt/gcc-5/bin/g++ make examples
 ```
+
+Note: `make examples` is needed to build example tools like `convert_mnist_data` used for MNIST data conversion.
 
 ## Add to Python Path
 
@@ -116,6 +119,22 @@ ldd /usr/local/caffe/python/caffe/_caffe.so | grep python
 ```
 
 ## Troubleshooting
+
+### MNIST Data Conversion: convert_mnist_data not found
+
+The `convert_mnist_data` tool is an example program that must be compiled. Make sure to build it:
+
+```bash
+cd /path/to/caffe/build
+make examples
+```
+
+The compiled binary will be located at: `/path/to/caffe/build/examples/mnist/convert_mnist_data`
+
+When running the conversion script, specify the Caffe root directory:
+```bash
+CAFFE_ROOT=/path/to/caffe ./convert_mnist_to_lmdb.sh
+```
 
 ### TypeError: Couldn't build proto file into descriptor pool: duplicate file name caffe/proto/caffe.proto
 
