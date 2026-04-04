@@ -191,27 +191,24 @@ def patch_solver(solver_file, config):
 
 
 def get_test_interval(patched_solver):
-    """Get test_interval from solver file with fallback
+    """Get test_interval from solver file
     
-    Attempts to read from solver.param, falls back to reading file directly.
+    Reads test_interval directly from the patched solver file.
     
     Args:
         patched_solver (str): Path to patched solver file
         
     Returns:
-        int: test_interval value
+        int: test_interval value (default: 500 if not found)
     """
     try:
-        # Try to get from solver param first (may not always work)
-        return None
-    except:
-        pass
-    
-    # Fallback: read from file
-    with open(patched_solver, 'r') as f:
-        solver_content = f.read()
-    match = re.search(r'test_interval:\s*(\d+)', solver_content)
-    return int(match.group(1)) if match else 500
+        with open(patched_solver, 'r') as f:
+            solver_content = f.read()
+        match = re.search(r'test_interval:\s*(\d+)', solver_content)
+        return int(match.group(1)) if match else 500
+    except Exception as e:
+        print("Warning: Could not read test_interval from solver file: {}".format(e))
+        return 500  # Safe default
 
 
 def share_params_to_primary_gpu(solvers, primary_gpu_idx):
