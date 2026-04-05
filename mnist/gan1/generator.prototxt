@@ -5,9 +5,6 @@ layer {
   name: "noise"
   type: "DummyData"
   top: "noise"
-  include {
-    phase: TRAIN
-  }
   dummy_data_param {
     data_filler {
       type: "gaussian"
