@@ -264,18 +264,21 @@ def print_training_config(config, primary_gpu, num_gpus, gpu_list):
     print("-" * 60)
 
 
-def cleanup_temp_files(patched_network, patched_solver):
+def cleanup_temp_files(patched_network, patched_solver, no_test_solver=None):
     """Clean up temporary patched configuration files
     
     Args:
         patched_network (str): Path to patched network file
         patched_solver (str): Path to patched solver file
+        no_test_solver (str): Optional path to no-test solver file
     """
     try:
         if os.path.exists(patched_network):
             os.remove(patched_network)
         if os.path.exists(patched_solver):
             os.remove(patched_solver)
+        if no_test_solver and os.path.exists(no_test_solver):
+            os.remove(no_test_solver)
         print("Cleaned up temporary patched files")
     except Exception as e:
         print("Warning: Could not clean up temporary files: {}".format(e))

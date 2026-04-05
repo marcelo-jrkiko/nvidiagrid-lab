@@ -11,6 +11,7 @@ import time
 import shutil
 import glob
 import subprocess
+import re
 
 # Remove current directory from sys.path before importing caffe to avoid protobuf conflicts
 if '' in sys.path:
@@ -114,6 +115,7 @@ def train_mnist_multi_gpu(config, gpu_list, patched_solver, patched_network):
     
     logging.info("Training model on GPUs: {} (parallel execution)".format(gpu_list))
     logging.info("Using Caffe CLI for true multi-GPU training")
+    logging.info("NOTE: Testing disabled during multi-GPU training to avoid GPU memory/sync issues")
     logging.info("")
     
     # Get max iterations from solver
@@ -128,11 +130,23 @@ def train_mnist_multi_gpu(config, gpu_list, patched_solver, patched_network):
     if num_iterations is None:
         num_iterations = 50000  # Default fallback
     
-    # Build caffe train command
+    # Disable testing during multi-GPU training to avoid memory/synchronization issues
+    # Read solver and temporarily disable testing
+    with open(patched_solver, 'r') as f:
+        solver_content = f.read()
+    
+    # Create a no-test version of the solver
+    no_test_solver = patched_solver.replace('.patched', '.no_test.patched')
+    solver_no_test = re.sub(r'test_interval:\s*\d+', 'test_interval: 10000000', solver_content)
+    
+    with open(no_test_solver, 'w') as f:
+        f.write(solver_no_test)
+    
+    # Build caffe train command using no-test solver
     cmd = [
         CAFFE_BIN,
         'train',
-        '-solver', patched_solver,
+        '-solver', no_test_solver,
         '-gpu', gpu_ids
     ]
     
@@ -180,7 +194,7 @@ def train_mnist_multi_gpu(config, gpu_list, patched_solver, patched_network):
         logging.error("Error executing caffe training: {}".format(e))
         sys.exit(1)
     
-    return elapsed_time, num_iterations
+    return elapsed_time, num_iterations, no_test_solver
 
 
 def save_training_results(results_dir, elapsed_time, num_iterations, config, 
@@ -285,8 +299,9 @@ def train_mnist():
     try:
         if num_gpus == 1:
             elapsed_time, num_iterations = train_mnist_single_gpu(config, primary_gpu, patched_solver, patched_network)
+            no_test_solver = None
         else:
-            elapsed_time, num_iterations = train_mnist_multi_gpu(config, gpu_list, patched_solver, patched_network)
+            elapsed_time, num_iterations, no_test_solver = train_mnist_multi_gpu(config, gpu_list, patched_solver, patched_network)
     except Exception as e:
         print("Error during training: {}".format(e))
         sys.exit(1)
@@ -313,7 +328,7 @@ def train_mnist():
     logging.info("-" * 60)
     logging.info("Training complete!")
     logging.info("Results saved to: {}".format(results_dir))
-    cleanup_temp_files(patched_network, patched_solver)
+    cleanup_temp_files(patched_network, patched_solver, no_test_solver)
 
 if __name__ == '__main__':
     train_mnist()
