@@ -32,7 +32,7 @@ for file_path in model_files + state_files:
         logging.info("Moved: {} -> {}".format(file_path, dest_path))
 
 # Copy lenet prototxt for each model file with matching filename
-lenet_prototxt =  os.path.join(os.getcwd(), 'mnist_lenet.prototxt')ls 
+lenet_prototxt =  os.path.join(os.getcwd(), 'mnist_lenet.prototxt')
 if os.path.exists(lenet_prototxt):
     logging.info("Found lenet prototxt: {}".format(lenet_prototxt))
     for model_file in model_files:
