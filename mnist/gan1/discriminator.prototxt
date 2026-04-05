@@ -203,7 +203,7 @@ layer {
 layer {
   name: "sigmoid"
   type: "Sigmoid"
-  bottom: "fc_out"
+  bottom: "prediction"
   top: "output"
 }
 
