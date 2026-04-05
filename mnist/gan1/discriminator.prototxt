@@ -1,0 +1,217 @@
+name: "MNIST_GAN_Discriminator"
+
+# Input data layer for training (real MNIST images)
+layer {
+  name: "data"
+  type: "Data"
+  top: "data"
+  top: "label"
+  include {
+    phase: TRAIN
+  }
+  transform_param {
+    scale: 0.00390625
+  }
+  data_param {
+    source: "mnist_lmdb/mnist_train_lmdb"
+    batch_size: 128
+    backend: LMDB
+  }
+}
+
+# Convolution layer 1: 1 filter (28x28) -> 64 filters (14x14)
+layer {
+  name: "conv1"
+  type: "Convolution"
+  bottom: "data"
+  top: "conv1"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  convolution_param {
+    num_output: 64
+    kernel_size: 4
+    stride: 2
+    pad: 1
+    weight_filler {
+      type: "gaussian"
+      std: 0.02
+    }
+    bias_filler {
+      type: "constant"
+      value: 0
+    }
+  }
+}
+
+# LeakyReLU activation
+layer {
+  name: "lrelu1"
+  type: "ReLU"
+  bottom: "conv1"
+  top: "lrelu1"
+  relu_param {
+    negative_slope: 0.2
+  }
+}
+
+# Convolution layer 2: 64 filters (14x14) -> 128 filters (7x7)
+layer {
+  name: "conv2"
+  type: "Convolution"
+  bottom: "lrelu1"
+  top: "conv2"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  convolution_param {
+    num_output: 128
+    kernel_size: 4
+    stride: 2
+    pad: 1
+    weight_filler {
+      type: "gaussian"
+      std: 0.02
+    }
+    bias_filler {
+      type: "constant"
+      value: 0
+    }
+  }
+}
+
+# Batch normalization
+layer {
+  name: "bn2"
+  type: "BatchNorm"
+  bottom: "conv2"
+  top: "bn2"
+  batch_norm_param {
+    use_global_stats: false
+  }
+}
+
+# LeakyReLU activation
+layer {
+  name: "lrelu2"
+  type: "ReLU"
+  bottom: "bn2"
+  top: "lrelu2"
+  relu_param {
+    negative_slope: 0.2
+  }
+}
+
+# Flatten layer: 128 filters * 7 * 7 = 6272
+layer {
+  name: "flatten"
+  type: "Flatten"
+  bottom: "lrelu2"
+  top: "flattened"
+  flatten_param {
+    axis: 1
+  }
+}
+
+# Fully connected layer: 6272 -> 1024
+layer {
+  name: "fc1"
+  type: "InnerProduct"
+  bottom: "flattened"
+  top: "fc1"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  inner_product_param {
+    num_output: 1024
+    weight_filler {
+      type: "gaussian"
+      std: 0.02
+    }
+    bias_filler {
+      type: "constant"
+      value: 0
+    }
+  }
+}
+
+# Batch normalization
+layer {
+  name: "bn3"
+  type: "BatchNorm"
+  bottom: "fc1"
+  top: "bn3"
+  batch_norm_param {
+    use_global_stats: false
+  }
+}
+
+# LeakyReLU activation
+layer {
+  name: "lrelu3"
+  type: "ReLU"
+  bottom: "bn3"
+  top: "lrelu3"
+  relu_param {
+    negative_slope: 0.2
+  }
+}
+
+# Output layer: 1024 -> 1 (probability of being real)
+layer {
+  name: "fc_out"
+  type: "InnerProduct"
+  bottom: "lrelu3"
+  top: "prediction"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  inner_product_param {
+    num_output: 1
+    weight_filler {
+      type: "gaussian"
+      std: 0.02
+    }
+    bias_filler {
+      type: "constant"
+      value: 0
+    }
+  }
+}
+
+# Sigmoid to output probability
+layer {
+  name: "sigmoid"
+  type: "Sigmoid"
+  bottom: "fc_out"
+  top: "output"
+}
+
+# Loss layer
+layer {
+  name: "loss"
+  type: "SigmoidCrossEntropyLoss"
+  bottom: "prediction"
+  bottom: "label"
+  top: "loss"
+}

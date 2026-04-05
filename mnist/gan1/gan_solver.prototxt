@@ -1,0 +1,37 @@
+# GAN Solver Configuration for MNIST
+
+# Generator solver
+net: "generator.prototxt"
+test_state: {
+  stage: "gen"
+}
+test_iter: 100
+test_interval: 500
+
+# Training parameters
+base_lr: 0.0002
+lr_policy: "fixed"
+momentum: 0.5
+weight_decay: 0.0005
+
+# Optimization method
+type: "Adam"
+adam_param {
+  beta1: 0.5
+  beta2: 0.999
+}
+
+display: 100
+max_iter: 100000
+snapshot: 10000
+snapshot_prefix: "mnist_gan"
+
+# GPU configuration
+device_id: 0
+solver_mode: GPU
+
+# Seed for reproducibility
+random_seed: 1
+
+# Debug level
+debug_info: false

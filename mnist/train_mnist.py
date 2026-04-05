@@ -45,9 +45,11 @@ logging.basicConfig(
 # Global variable to hold the caffe utility path
 CAFFE_BIN = os.getenv('CAFFE_BIN', '/usr/local/caffe/build/tools/caffe')
 
-# Patch configuration files
-network_prototxt = 'mnist_lenet.prototxt'
-solver_prototxt = 'mnist_solver.prototxt'
+# Configs
+network_prototxt = os.getenv('MNIST_NETWORK_PROTOTXT', 'mnist_lenet.prototxt')
+solver_prototxt = os.getenv('MNIST_SOLVER_PROTOTXT', 'mnist_solver.prototxt')
+snapshot_prefix = os.getenv('MNIST_SNAPSHOT_PREFIX', 'mnist_model')
+results_dir = os.getenv('MNIST_RESULTS_DIR', 'results')
 
 def train_mnist_single_gpu(config, primary_gpu, patched_solver, patched_network):
     """Train on a single GPU (baseline)
@@ -318,9 +320,8 @@ def train_mnist():
         sys.exit(1)
     
     # Save results to results folder
-    results_dir = os.path.join(os.getcwd(), 'results')
-    snapshot_prefix = 'mnist_model'
-    
+    results_dir = os.path.join(os.getcwd(), results_dir)
+        
     try:
         save_training_results(
             results_dir, 

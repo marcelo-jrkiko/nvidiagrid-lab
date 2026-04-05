@@ -1,0 +1,206 @@
+name: "MNIST_GAN_Generator"
+
+# Input noise layer
+layer {
+  name: "noise"
+  type: "Data"
+  top: "noise"
+  include {
+    phase: TRAIN
+  }
+}
+
+# Fully connected layer: noise (100) -> 1024
+layer {
+  name: "fc1"
+  type: "InnerProduct"
+  bottom: "noise"
+  top: "fc1"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  inner_product_param {
+    num_output: 1024
+    weight_filler {
+      type: "gaussian"
+      std: 0.02
+    }
+    bias_filler {
+      type: "constant"
+      value: 0
+    }
+  }
+}
+
+# Batch normalization
+layer {
+  name: "bn1"
+  type: "BatchNorm"
+  bottom: "fc1"
+  top: "bn1"
+  batch_norm_param {
+    use_global_stats: false
+  }
+}
+
+# ReLU activation
+layer {
+  name: "relu1"
+  type: "ReLU"
+  bottom: "bn1"
+  top: "relu1"
+}
+
+# Fully connected layer: 1024 -> 7*7*128 = 6272
+layer {
+  name: "fc2"
+  type: "InnerProduct"
+  bottom: "relu1"
+  top: "fc2"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  inner_product_param {
+    num_output: 6272
+    weight_filler {
+      type: "gaussian"
+      std: 0.02
+    }
+    bias_filler {
+      type: "constant"
+      value: 0
+    }
+  }
+}
+
+# Batch normalization
+layer {
+  name: "bn2"
+  type: "BatchNorm"
+  bottom: "fc2"
+  top: "bn2"
+  batch_norm_param {
+    use_global_stats: false
+  }
+}
+
+# ReLU activation
+layer {
+  name: "relu2"
+  type: "ReLU"
+  bottom: "bn2"
+  top: "relu2"
+}
+
+# Reshape to 128 filters, 7x7 spatial dimensions
+layer {
+  name: "reshape"
+  type: "Reshape"
+  bottom: "relu2"
+  top: "reshaped"
+  reshape_param {
+    shape {
+      dim: 0
+      dim: 128
+      dim: 7
+      dim: 7
+    }
+  }
+}
+
+# Deconvolution layer 1: 128 filters (7x7) -> 64 filters (14x14)
+layer {
+  name: "deconv1"
+  type: "Deconvolution"
+  bottom: "reshaped"
+  top: "deconv1"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  convolution_param {
+    num_output: 64
+    kernel_size: 4
+    stride: 2
+    pad: 1
+    weight_filler {
+      type: "gaussian"
+      std: 0.02
+    }
+    bias_filler {
+      type: "constant"
+      value: 0
+    }
+  }
+}
+
+# Batch normalization
+layer {
+  name: "bn3"
+  type: "BatchNorm"
+  bottom: "deconv1"
+  top: "bn3"
+  batch_norm_param {
+    use_global_stats: false
+  }
+}
+
+# ReLU activation
+layer {
+  name: "relu3"
+  type: "ReLU"
+  bottom: "bn3"
+  top: "relu3"
+}
+
+# Deconvolution layer 2: 64 filters (14x14) -> 1 filter (28x28)
+layer {
+  name: "deconv2"
+  type: "Deconvolution"
+  bottom: "relu3"
+  top: "fake_image"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  convolution_param {
+    num_output: 1
+    kernel_size: 4
+    stride: 2
+    pad: 1
+    weight_filler {
+      type: "gaussian"
+      std: 0.02
+    }
+    bias_filler {
+      type: "constant"
+      value: 0
+    }
+  }
+}
+
+# Tanh activation to output in range [-1, 1]
+layer {
+  name: "tanh"
+  type: "TanH"
+  bottom: "fake_image"
+  top: "generated"
+}
