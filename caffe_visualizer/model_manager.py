@@ -83,7 +83,7 @@ class CaffeModelManager:
         for model_name in all_model_names:
             proto_path = proto_files.get(model_name)
             model_path = model_files.get(model_name)
-            
+                       
             logging.debug(f"Processing model: {model_name}, proto: {proto_path}, model: {model_path}")
             
             # Calculate file sizes
