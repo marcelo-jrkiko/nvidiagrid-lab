@@ -1,6 +1,6 @@
 
 # Create results directory if it doesn't exist
-from glob import glob
+import glob
 import logging
 import os
 import shutil
