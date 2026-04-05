@@ -55,22 +55,6 @@ CAFFE_BIN = os.getenv('CAFFE_BIN', '/usr/local/caffe/build/tools/caffe')
 # Training mode (single network or GAN)
 TRAINING_MODE = 'single'  # Will be set via command line argument
 
-# Configs for single network training
-network_prototxt = os.getenv('MNIST_NETWORK_PROTOTXT', 'mnist_lenet.prototxt')
-solver_prototxt = os.getenv('MNIST_SOLVER_PROTOTXT', 'mnist_solver.prototxt')
-snapshot_prefix = os.getenv('MNIST_SNAPSHOT_PREFIX', 'mnist_model')
-results_dir = os.getenv('MNIST_RESULTS_DIR', 'results')
-
-# Configs for GAN training
-gan_generator_prototxt = os.getenv('GAN_GENERATOR_PROTOTXT', 'gan1/generator.prototxt')
-gan_discriminator_prototxt = os.getenv('GAN_DISCRIMINATOR_PROTOTXT', 'gan1/discriminator.prototxt')
-gan_solver_prototxt = os.getenv('GAN_SOLVER_PROTOTXT', 'gan1/gan_solver.prototxt')
-gan_snapshot_prefix = os.getenv('GAN_SNAPSHOT_PREFIX', 'gan_model')
-gan_results_dir = os.getenv('GAN_RESULTS_DIR', 'gan_results')
-gan_iterations = int(os.getenv('GAN_ITERATIONS', '10000'))
-gan_critic_iters = int(os.getenv('GAN_CRITIC_ITERS', '1'))  # Discriminator updates per generator update
-gan_noise_dim = int(os.getenv('GAN_NOISE_DIM', '100'))  # Noise vector dimension
-
 def train_mnist_single_gpu(config, primary_gpu, patched_solver, patched_network):
     """Train on a single GPU (baseline)
     
@@ -263,8 +247,8 @@ def train_gan_single_gpu(config, primary_gpu, gen_solver_path, disc_solver_path,
     logging.info("Generator network: {}".format(gen_net_path))
     logging.info("Discriminator network: {}".format(disc_net_path))
     logging.info("GAN training with alternating updates")
-    logging.info("Generator iterations: {}".format(gan_iterations))
-    logging.info("Discriminator updates per generator: {}".format(gan_critic_iters))
+    logging.info("Generator iterations: {}".format(config.gan_iterations))
+    logging.info("Discriminator updates per generator: {}".format(config.gan_critic_iters))
     logging.info("")
     
     # Get batch size from generator network
@@ -275,9 +259,9 @@ def train_gan_single_gpu(config, primary_gpu, gen_solver_path, disc_solver_path,
     logging.info("Discriminator batch size: {}".format(disc_batch_size))
     
     # Training loop
-    for iteration in range(gan_iterations):
+    for iteration in range(config.gan_iterations):
         # Update discriminator multiple times per generator update
-        for _ in range(gan_critic_iters):
+        for _ in range(config.gan_critic_iters):
             # Discriminator training on real data
             disc_solver.step(1)
             disc_loss_real = disc_solver.net.blobs['loss'].data.copy()
@@ -302,7 +286,7 @@ def train_gan_single_gpu(config, primary_gpu, gen_solver_path, disc_solver_path,
             # Model saving is typically handled by solver snapshots
     
     elapsed_time = time.time() - start_time
-    return elapsed_time, gan_iterations
+    return elapsed_time, config.gan_iterations
 
 
 def train_gan_multi_gpu(config, gpu_list, gen_solver_path, disc_solver_path,
@@ -377,8 +361,8 @@ def save_gan_training_results(results_dir, elapsed_time, num_iterations, config,
             logging.info("Moved: {} -> {}".format(file_path, dest_path))
     
     # Copy prototxt files for reference
-    for net_file, net_name in [(gan_generator_prototxt, 'generator'),
-                               (gan_discriminator_prototxt, 'discriminator')]:
+    for net_file, net_name in [(config.gan_generator_prototxt, 'generator'),
+                               (config.gan_discriminator_prototxt, 'discriminator')]:
         if os.path.exists(net_file):
             dest_prototxt = os.path.join(results_dir, net_name + '.prototxt')
             shutil.copy2(net_file, dest_prototxt)
@@ -395,8 +379,8 @@ def save_gan_training_results(results_dir, elapsed_time, num_iterations, config,
         f.write("Primary GPU: {}\n".format(primary_gpu))
         f.write("Mode: GAN (Generative Adversarial Network)\n")
         f.write("Max Iterations: {}\n".format(num_iterations))
-        f.write("Noise Dimension: {}\n".format(gan_noise_dim))
-        f.write("Critic Updates per Generator: {}\n".format(gan_critic_iters))
+        f.write("Noise Dimension: {}\n".format(config.gan_noise_dim))
+        f.write("Critic Updates per Generator: {}\n".format(config.gan_critic_iters))
         f.write("\n")
         f.write("Training Results\n")
         f.write("-" * 60 + "\n")
@@ -449,7 +433,7 @@ def save_gan_training_results(results_dir, elapsed_time, num_iterations, config,
             logging.info("Moved: {} -> {}".format(file_path, dest_path))
     
     # Copy lenet prototxt for each model file with matching filename
-    lenet_prototxt = os.path.join(os.getcwd(), network_prototxt)
+    lenet_prototxt = os.path.join(os.getcwd(), config.network_prototxt)
     if os.path.exists(lenet_prototxt):
         for model_file in model_files:
             # Create prototxt copy with model's base name
@@ -527,12 +511,12 @@ def train_single_network(config, gpu_list, primary_gpu, num_gpus):
     logging.info("=" * 60)
     
     try:
-        patched_network = patch_prototxt(network_prototxt, config)
-        patched_solver = patch_solver(solver_prototxt, config)
+        patched_network = patch_prototxt(config.network_prototxt, config)
+        patched_solver = patch_solver(config.solver_prototxt, config)
         
         logging.info("Patched configuration files for preset: {}".format(config.preset))
-        logging.info("  - Network: {} -> {}".format(network_prototxt, patched_network))
-        logging.info("  - Solver: {} -> {}".format(solver_prototxt, patched_solver))
+        logging.info("  - Network: {} -> {}".format(config.network_prototxt, patched_network))
+        logging.info("  - Solver: {} -> {}".format(config.solver_prototxt, patched_solver))
         logging.info("")
         
     except IOError as e:
@@ -554,7 +538,7 @@ def train_single_network(config, gpu_list, primary_gpu, num_gpus):
         sys.exit(1)
     
     # Save results to results folder
-    results_dir_path = os.path.join(os.getcwd(), results_dir)
+    results_dir_path = os.path.join(os.getcwd(), config.results_dir)
     
     try:
         save_training_results(
@@ -564,7 +548,7 @@ def train_single_network(config, gpu_list, primary_gpu, num_gpus):
             config, 
             primary_gpu, 
             patched_solver, 
-            snapshot_prefix
+            config.snapshot_prefix
         )
     except Exception as e:
         logging.error("Error saving training results: {}".format(e))
@@ -594,17 +578,18 @@ def train_gan_network(config, gpu_list, primary_gpu, num_gpus):
     
     try:
         # Patch generator network and solver
-        gen_patched_network = patch_prototxt(gan_generator_prototxt, config)
-        gen_patched_solver = patch_solver(gan_solver_prototxt, config)
+        gen_patched_network = patch_prototxt(config.gan_generator_prototxt, config)
+        gen_patched_solver = patch_solver(config.gan_gen_solver_prototxt, config)
         
-        # For GAN, we use a simple approach without patching discriminator
-        # (it will be loaded separately with its own solver)
-        disc_patched_network = gan_discriminator_prototxt
+        # Patch discriminator network and solver
+        disc_patched_network = patch_prototxt(config.gan_discriminator_prototxt, config)
+        disc_patched_solver = patch_solver(config.gan_disc_solver_prototxt, config)
         
         logging.info("Patched GAN configuration files for preset: {}".format(config.preset))
-        logging.info("  - Generator: {} -> {}".format(gan_generator_prototxt, gen_patched_network))
-        logging.info("  - Generator Solver: {} -> {}".format(gan_solver_prototxt, gen_patched_solver))
-        logging.info("  - Discriminator: {}".format(disc_patched_network))
+        logging.info("  - Generator: {} -> {}".format(config.gan_generator_prototxt, gen_patched_network))
+        logging.info("  - Generator Solver: {} -> {}".format(config.gan_gen_solver_prototxt, gen_patched_solver))
+        logging.info("  - Discriminator: {} -> {}".format(config.gan_discriminator_prototxt, disc_patched_network))
+        logging.info("  - Discriminator Solver: {} -> {}".format(config.gan_disc_solver_prototxt, disc_patched_solver))
         logging.info("")
         
     except IOError as e:
@@ -612,25 +597,25 @@ def train_gan_network(config, gpu_list, primary_gpu, num_gpus):
         sys.exit(1)
     
     logging.info("GAN Training Configuration:")
-    logging.info("  Total Iterations: {}".format(gan_iterations))
-    logging.info("  Noise Dimension: {}".format(gan_noise_dim))
-    logging.info("  Discriminator Updates per Generator: {}".format(gan_critic_iters))
+    logging.info("  Total Iterations: {}".format(config.gan_iterations))
+    logging.info("  Noise Dimension: {}".format(config.gan_noise_dim))
+    logging.info("  Discriminator Updates per Generator: {}".format(config.gan_critic_iters))
     logging.info("  GPUs: {}".format(gpu_list))
     logging.info("")
     
     # Train based on GPU count
+    no_test_solver = None
     try:
         if num_gpus == 1:
             elapsed_time, num_iterations = train_gan_single_gpu(config, primary_gpu, 
                                                                gen_patched_solver, 
-                                                               gan_solver_prototxt,
+                                                               disc_patched_solver,
                                                                gen_patched_network, 
                                                                disc_patched_network)
-            no_test_solver = None
         else:
             elapsed_time, num_iterations, no_test_solver = train_gan_multi_gpu(config, gpu_list, 
                                                                                gen_patched_solver, 
-                                                                               gan_solver_prototxt,
+                                                                               disc_patched_solver,
                                                                                gen_patched_network, 
                                                                                disc_patched_network)
     except Exception as e:
@@ -638,7 +623,7 @@ def train_gan_network(config, gpu_list, primary_gpu, num_gpus):
         sys.exit(1)
     
     # Save results to results folder
-    results_dir_path = os.path.join(os.getcwd(), gan_results_dir)
+    results_dir_path = os.path.join(os.getcwd(), config.gan_results_dir)
     
     try:
         save_gan_training_results(
@@ -647,8 +632,8 @@ def train_gan_network(config, gpu_list, primary_gpu, num_gpus):
             num_iterations,
             config,
             primary_gpu,
-            gan_snapshot_prefix,
-            gan_snapshot_prefix + "_disc"
+            config.gan_snapshot_prefix,
+            config.gan_disc_snapshot_prefix
         )
     except Exception as e:
         logging.error("Error saving GAN training results: {}".format(e))
@@ -658,7 +643,8 @@ def train_gan_network(config, gpu_list, primary_gpu, num_gpus):
     logging.info("-" * 60)
     logging.info("GAN training complete!")
     logging.info("Results saved to: {}".format(results_dir_path))
-    cleanup_temp_files(gen_patched_network, gen_patched_solver, no_test_solver)
+    cleanup_temp_files(gen_patched_network, gen_patched_solver, None)
+    cleanup_temp_files(disc_patched_network, disc_patched_solver, None)
     
     return elapsed_time, num_iterations, results_dir_path
 

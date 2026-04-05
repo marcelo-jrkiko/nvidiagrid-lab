@@ -10,20 +10,38 @@ import numpy as np
 
 
 class Config:
-    """Configuration struct for training hyperparameters"""
+    """Configuration struct for training hyperparameters and file paths"""
     def __init__(self):
         self.input_size = 784   # 28x28 flattened
         self.output_size = 10   # 10 digits
         self.batch_size = 128
         self.hidden_size = 128
         self.preset = "MEDIUM"
+        
+        # Single network training (LeNet) configuration
+        self.network_prototxt = None
+        self.solver_prototxt = None
+        self.snapshot_prefix = None
+        self.results_dir = None
+        
+        # GAN training configuration
+        self.gan_generator_prototxt = None
+        self.gan_discriminator_prototxt = None
+        self.gan_gen_solver_prototxt = None
+        self.gan_disc_solver_prototxt = None
+        self.gan_snapshot_prefix = None
+        self.gan_disc_snapshot_prefix = None
+        self.gan_results_dir = None
+        self.gan_iterations = None
+        self.gan_critic_iters = None
+        self.gan_noise_dim = None
 
 
 def get_config():
     """Get configuration from environment variables or presets
     
     Returns:
-        Config: Configuration object with batch_size and other hyperparameters
+        Config: Configuration object with batch_size, hyperparameters, and file paths
     """
     config = Config()
     
@@ -49,6 +67,26 @@ def get_config():
         config.batch_size = 64
         config.hidden_size = 96
         config.preset = "MEDIUM"
+    
+    # Single network training (LeNet) paths
+    config.network_prototxt = os.getenv('MNIST_NETWORK_PROTOTXT', 'simple/mnist_lenet.prototxt')
+    config.solver_prototxt = os.getenv('MNIST_SOLVER_PROTOTXT', 'simple/mnist_solver.prototxt')
+    config.snapshot_prefix = os.getenv('MNIST_SNAPSHOT_PREFIX', 'mnist_model')
+    config.results_dir = os.getenv('MNIST_RESULTS_DIR', 'results')
+    
+    # GAN training paths
+    config.gan_generator_prototxt = os.getenv('GAN_GENERATOR_PROTOTXT', 'gan1/generator.prototxt')
+    config.gan_discriminator_prototxt = os.getenv('GAN_DISCRIMINATOR_PROTOTXT', 'gan1/discriminator.prototxt')
+    config.gan_gen_solver_prototxt = os.getenv('GAN_GEN_SOLVER_PROTOTXT', 'gan1/gan_solver.prototxt')
+    config.gan_disc_solver_prototxt = os.getenv('GAN_DISC_SOLVER_PROTOTXT', 'gan1/discriminator_solver.prototxt')
+    config.gan_snapshot_prefix = os.getenv('GAN_SNAPSHOT_PREFIX', 'gan_model')
+    config.gan_disc_snapshot_prefix = os.getenv('GAN_DISC_SNAPSHOT_PREFIX', 'gan_model_disc')
+    config.gan_results_dir = os.getenv('GAN_RESULTS_DIR', 'gan_results')
+    
+    # GAN training hyperparameters
+    config.gan_iterations = int(os.getenv('GAN_ITERATIONS', '10000'))
+    config.gan_critic_iters = int(os.getenv('GAN_CRITIC_ITERS', '1'))
+    config.gan_noise_dim = int(os.getenv('GAN_NOISE_DIM', '100'))
     
     return config
 

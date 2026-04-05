@@ -1,37 +1,24 @@
-# GAN Solver Configuration for MNIST
+# GAN Solver Configuration for MNIST - Generator Network
+# Uses SGD optimizer optimized for GAN training (lower learning rate, high momentum)
 
-# Generator solver
 net: "generator.prototxt"
-test_state: {
-  stage: "gen"
-}
 test_iter: 100
-test_interval: 500
+test_interval: 10000
 
-# Training parameters
+# Training parameters optimized for GAN
 base_lr: 0.0002
 lr_policy: "fixed"
 momentum: 0.5
 weight_decay: 0.0005
 
-# Optimization method
-type: "Adam"
-adam_param {
-  beta1: 0.5
-  beta2: 0.999
-}
-
 display: 100
-max_iter: 100000
-snapshot: 10000
-snapshot_prefix: "mnist_gan"
+max_iter: 10000
+snapshot: 1000
+snapshot_prefix: "gan_model"
 
 # GPU configuration
 device_id: 0
 solver_mode: GPU
 
 # Seed for reproducibility
-random_seed: 1
-
-# Debug level
-debug_info: false
+random_seed: 1701

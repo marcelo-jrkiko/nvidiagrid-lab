@@ -57,21 +57,24 @@ The discriminator receives images (real or fake) and predicts the probability th
 ## File Descriptions
 
 - **`generator.prototxt`**: Generator network architecture
+- **`gan_solver.prototxt`**: Solver configuration for generator training
 - **`discriminator.prototxt`**: Discriminator network architecture  
-- **`gan_solver.prototxt`**: Solver configuration for training
+- **`discriminator_solver.prototxt`**: Solver configuration for discriminator training
 
-## Solver Configuration (`gan_solver.prototxt`)
+## Solver Configuration
 
-- **Optimizer**: Adam
+Both `gan_solver.prototxt` (Generator) and `discriminator_solver.prototxt` (Discriminator):
+
+- **Optimizer**: SGD (Stochastic Gradient Descent)
   - Base learning rate: 0.0002
-  - Beta1 (momentum): 0.5
-  - Beta2: 0.999
+  - Momentum: 0.5
   - Weight decay: 0.0005
+  - Policy: fixed (constant learning rate)
 
 - **Training**:
-  - Max iterations: 100,000
+  - Max iterations: 10,000
   - Display interval: Every 100 iterations
-  - Snapshot interval: Every 10,000 iterations
+  - Snapshot interval: Every 1,000 iterations
   - GPU acceleration enabled
 
 ## Implementation Notes
