@@ -233,13 +233,12 @@ def save_training_results(results_dir, elapsed_time, num_iterations, config,
     lenet_prototxt = os.path.join(os.getcwd(), network_prototxt)
     if os.path.exists(lenet_prototxt):
         for model_file in model_files:
-            if os.path.exists(model_file):
-                # Create prototxt copy with model's base name
-                model_basename = os.path.basename(model_file)
-                prototxt_name = os.path.splitext(model_basename)[0] + '.prototxt'
-                dest_prototxt_path = os.path.join(results_dir, prototxt_name)
-                shutil.copy2(lenet_prototxt, dest_prototxt_path)
-                logging.info("Copied lenet prototxt: {} -> {}".format(lenet_prototxt, dest_prototxt_path))
+            # Create prototxt copy with model's base name
+            model_basename = os.path.basename(model_file)
+            prototxt_name = os.path.splitext(model_basename)[0] + '.prototxt'
+            dest_prototxt_path = os.path.join(results_dir, prototxt_name)
+            shutil.copy2(lenet_prototxt, dest_prototxt_path)
+            logging.info("Copied lenet prototxt: {} -> {}".format(lenet_prototxt, dest_prototxt_path))
     
     # Create training summary file
     summary_file = os.path.join(results_dir, "training_summary.txt")

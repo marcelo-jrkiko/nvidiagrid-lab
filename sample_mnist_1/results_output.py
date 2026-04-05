@@ -36,12 +36,10 @@ lenet_prototxt =  os.path.join(os.getcwd(), 'mnist_lenet.prototxt')
 if os.path.exists(lenet_prototxt):
     logging.info("Found lenet prototxt: {}".format(lenet_prototxt))
     for model_file in model_files:
-        if os.path.exists(model_file):
-            # Create prototxt copy with model's base name
-            model_basename = os.path.basename(model_file)
-            prototxt_name = os.path.splitext(model_basename)[0] + '.prototxt'
-            dest_prototxt_path = os.path.join(results_dir, prototxt_name)
-            shutil.copy2(lenet_prototxt, dest_prototxt_path)
-            logging.info("Copied lenet prototxt: {} -> {}".format(lenet_prototxt, dest_prototxt_path))
+        model_basename = os.path.basename(model_file)
+        prototxt_name = os.path.splitext(model_basename)[0] + '.prototxt'
+        dest_prototxt_path = os.path.join(results_dir, prototxt_name)
+        shutil.copy2(lenet_prototxt, dest_prototxt_path)
+        logging.info("Copied lenet prototxt: {} -> {}".format(lenet_prototxt, dest_prototxt_path))
 else:
     logging.warning("Lenet prototxt not found: {}".format(lenet_prototxt))
