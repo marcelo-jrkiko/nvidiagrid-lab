@@ -1,9 +1,9 @@
 /**
  * Caffe Model Visualizer - Main Visualization Script
  * Handles both 2D and 3D network visualization
+ * Note: modelName is initialized in visualization.html template
  */
 
-const modelName = '{{ model_name }}';
 let currentLayers = [];
 let networkVisualizer3D = null;
 let autoRotateEnabled = false;

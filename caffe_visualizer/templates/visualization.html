@@ -77,6 +77,10 @@
         </footer>
     </div>
 
+    <!-- Initialize model name from template context (must be before visualization.js) -->
+    <script>
+        const modelName = '{{ model_name }}';
+    </script>
     <script src="{{ url_for('static', filename='visualization.js') }}"></script>
 </body>
 </html>
