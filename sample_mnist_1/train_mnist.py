@@ -34,11 +34,11 @@ import logging
 LOG_NAME = os.getenv('TRAINING_LOG', 'training.log')
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler(LOG_NAME),
-        logging.StreamHandler(sys.stdout)
+        logging.StreamHandler()
     ]
 )
 
@@ -331,4 +331,5 @@ def train_mnist():
     cleanup_temp_files(patched_network, patched_solver, no_test_solver)
 
 if __name__ == '__main__':
+    logging.info("Starting MNIST training script")
     train_mnist()
