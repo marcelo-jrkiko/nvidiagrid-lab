@@ -274,7 +274,7 @@ def train_single_network(config, gpu_list, primary_gpu, num_gpus):
     
     try:
         patched_network = patch_prototxt(config.network_prototxt, config)
-        patched_solver = patch_solver(config.solver_prototxt, config)
+        patched_solver = patch_solver(config.solver_prototxt, config, patched_network)
         
         logging.info("Patched configuration files for preset: {}".format(config.preset))
         logging.info("  - Network: {} -> {}".format(config.network_prototxt, patched_network))

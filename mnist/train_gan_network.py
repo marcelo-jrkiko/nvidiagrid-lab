@@ -250,11 +250,11 @@ def train_gan_network(config, gpu_list, primary_gpu, num_gpus):
     try:
         # Patch generator network and solver
         gen_patched_network = patch_prototxt(config.gan_generator_prototxt, config)
-        gen_patched_solver = patch_solver(config.gan_gen_solver_prototxt, config)
+        gen_patched_solver = patch_solver(config.gan_gen_solver_prototxt, config, gen_patched_network)
         
         # Patch discriminator network and solver
         disc_patched_network = patch_prototxt(config.gan_discriminator_prototxt, config)
-        disc_patched_solver = patch_solver(config.gan_disc_solver_prototxt, config)
+        disc_patched_solver = patch_solver(config.gan_disc_solver_prototxt, config, disc_patched_network)
         
         logging.info("Patched GAN configuration files for preset: {}".format(config.preset))
         logging.info("  - Generator: {} -> {}".format(config.gan_generator_prototxt, gen_patched_network))

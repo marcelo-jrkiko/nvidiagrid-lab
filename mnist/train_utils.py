@@ -183,7 +183,7 @@ def patch_prototxt(prototxt_file, config):
     return temp_file
 
 
-def patch_solver(solver_file, config):
+def patch_solver(solver_file, config, patched_network_file=None):
     """Patch solver file with hyperparameters from config preset
     
     Adjusts max_iter, test_interval, and learning rate based on batch size.
@@ -192,6 +192,8 @@ def patch_solver(solver_file, config):
     Args:
         solver_file (str): Path to solver configuration file
         config (Config): Configuration object with batch_size
+        patched_network_file (str): Path to patched network file to reference in solver.
+                                    If None, keeps the original network reference.
         
     Returns:
         str: Path to temporary patched file
@@ -217,8 +219,9 @@ def patch_solver(solver_file, config):
     content = re.sub(r'test_interval:\s*\d+', 'test_interval: {}'.format(test_interval), content)
     content = re.sub(r'base_lr:\s*[\d.]+', 'base_lr: {}'.format(base_lr), content)
     
-    # Update net parameter to use patched network file
-    content = re.sub(r'net:\s*"[^"]+"', 'net: "{}"'.format('mnist_lenet.prototxt.patched'), content)
+    # Update net parameter to use patched network file if provided
+    if patched_network_file:
+        content = re.sub(r'net:\s*"[^"]+"', 'net: "{}"'.format(patched_network_file), content)
     
     # Create patched temporary file
     temp_file = solver_file + '.patched'
