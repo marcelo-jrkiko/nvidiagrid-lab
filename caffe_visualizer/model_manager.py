@@ -4,6 +4,7 @@ Caffe Model Manager
 Handles listing, discovering, and retrieving information about Caffe models.
 """
 
+import logging
 import os
 import re
 from pathlib import Path
@@ -58,7 +59,9 @@ class CaffeModelManager:
             for file in files:
                 if any(file.endswith(ext) for ext in self.PROTO_EXTENSIONS):
                     filepath = os.path.join(root, file)
+                    logging.debug(f"Found proto file: {filepath}")
                     model_name = self._extract_model_name(file)
+                    logging.debug(f"Extracted model name: {model_name} from file: {file}")
                     if model_name not in proto_files:
                         proto_files[model_name] = filepath
         
@@ -68,7 +71,9 @@ class CaffeModelManager:
             for file in files:
                 if any(file.endswith(ext) for ext in self.MODEL_EXTENSIONS):
                     filepath = os.path.join(root, file)
+                    logging.debug(f"Found model file: {filepath}")
                     model_name = self._extract_model_name(file)
+                    logging.debug(f"Extracted model name: {model_name} from file: {file}")
                     if model_name not in model_files:
                         model_files[model_name] = filepath
         
@@ -78,6 +83,8 @@ class CaffeModelManager:
         for model_name in all_model_names:
             proto_path = proto_files.get(model_name)
             model_path = model_files.get(model_name)
+            
+            logging.debug(f"Processing model: {model_name}, proto: {proto_path}, model: {model_path}")
             
             # Calculate file sizes
             proto_size = os.path.getsize(proto_path) / (1024 * 1024) if proto_path else 0.0

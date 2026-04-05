@@ -11,10 +11,12 @@ from flask import Flask, render_template, jsonify, request
 from model_manager import CaffeModelManager
 from visualizer import CaffeVisualizer
 from dotenv import load_dotenv
+import logging
 
 app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
 
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 load_dotenv()  # Load environment variables from .env file if it exists
 
