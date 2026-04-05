@@ -45,6 +45,10 @@ logging.basicConfig(
 # Global variable to hold the caffe utility path
 CAFFE_BIN = os.getenv('CAFFE_BIN', '/usr/local/caffe/build/tools/caffe')
 
+# Patch configuration files
+network_prototxt = 'mnist_lenet.prototxt'
+solver_prototxt = 'mnist_solver.prototxt'
+
 def train_mnist_single_gpu(config, primary_gpu, patched_solver, patched_network):
     """Train on a single GPU (baseline)
     
@@ -226,7 +230,7 @@ def save_training_results(results_dir, elapsed_time, num_iterations, config,
             logging.info("Moved: {} -> {}".format(file_path, dest_path))
     
     # Copy lenet prototxt for each model file with matching filename
-    lenet_prototxt = 'mnist_lenet.prototxt'
+    lenet_prototxt = os.path.join(os.getcwd(), network_prototxt)
     if os.path.exists(lenet_prototxt):
         for model_file in model_files:
             if os.path.exists(model_file):
@@ -286,10 +290,6 @@ def train_mnist():
     
     # Print GPU configuration
     print_gpu_config(gpu_list, primary_gpu, num_gpus)
-    
-    # Patch configuration files
-    network_prototxt = 'mnist_lenet.prototxt'
-    solver_prototxt = 'mnist_solver.prototxt'
     
     try:
         patched_network = patch_prototxt(network_prototxt, config)
