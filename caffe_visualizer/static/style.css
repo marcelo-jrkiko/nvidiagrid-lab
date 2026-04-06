@@ -213,6 +213,30 @@ section h2 {
     font-weight: bold;
 }
 
+/* GAN Model Cards */
+.gan-model-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-color: #667eea;
+}
+
+.gan-model-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+}
+
+.gan-model-card h3 {
+    color: white;
+}
+
+.gan-model-card p {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.gan-model-card .size {
+    color: rgba(255, 255, 255, 0.9);
+}
+
 .loading {
     text-align: center;
     padding: 40px;

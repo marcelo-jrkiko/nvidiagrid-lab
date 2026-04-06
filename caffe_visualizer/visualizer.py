@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
 Caffe Model Visualizer
-Parses and visualizes Caffe model architecture.
+Parses and visualizes Caffe model architecture, including GAN models.
 """
 
 import re
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple, Optional
 from dataclasses import dataclass
 
 
@@ -20,11 +20,13 @@ class Layer:
 
 
 class CaffeVisualizer:
-    """Visualizes Caffe neural network models."""
+    """Visualizes Caffe neural network models and GANs."""
     
     def __init__(self):
         """Initialize the visualizer."""
         self.layers: List[Layer] = []
+        self.generator_layers: List[Dict[str, Any]] = []
+        self.discriminator_layers: List[Dict[str, Any]] = []
     
     def parse_prototxt(self, filepath: str) -> List[Dict[str, Any]]:
         """
@@ -207,3 +209,161 @@ class CaffeVisualizer:
             ascii_diagram += "\n"
         
         return ascii_diagram
+    
+    # GAN-specific methods
+    
+    def parse_gan_prototxt(self, generator_path: str, discriminator_path: str) -> Dict[str, Any]:
+        """
+        Parse both generator and discriminator prototxt files for a GAN.
+        
+        Args:
+            generator_path: Path to generator prototxt file
+            discriminator_path: Path to discriminator prototxt file
+            
+        Returns:
+            Dictionary with generator and discriminator layer data
+        """
+        try:
+            self.generator_layers = self.parse_prototxt(generator_path)
+            self.discriminator_layers = self.parse_prototxt(discriminator_path)
+            
+            return {
+                'generator': self.generator_layers,
+                'discriminator': self.discriminator_layers,
+                'generator_path': generator_path,
+                'discriminator_path': discriminator_path
+            }
+        except Exception as e:
+            raise IOError(f"Error parsing GAN prototxt files: {e}") from e
+    
+    def generate_gan_html_visualization(self, gan_data: Dict[str, Any]) -> Dict[str, str]:
+        """
+        Generate side-by-side HTML visualization for GAN (Generator + Discriminator).
+        
+        Args:
+            gan_data: Dictionary with generator and discriminator layer data
+            
+        Returns:
+            Dictionary with 'generator' and 'discriminator' HTML strings
+        """
+        generator_layers = gan_data.get('generator', [])
+        discriminator_layers = gan_data.get('discriminator', [])
+        
+        return {
+            'generator': self.generate_html_visualization(generator_layers),
+            'discriminator': self.generate_html_visualization(discriminator_layers)
+        }
+    
+    def generate_gan_ascii_diagram(self, gan_data: Dict[str, Any]) -> Dict[str, str]:
+        """
+        Generate ASCII diagrams for both generator and discriminator.
+        
+        Args:
+            gan_data: Dictionary with generator and discriminator layer data
+            
+        Returns:
+            Dictionary with 'generator' and 'discriminator' ASCII diagrams
+        """
+        generator_layers = gan_data.get('generator', [])
+        discriminator_layers = gan_data.get('discriminator', [])
+        
+        return {
+            'generator': self.generate_ascii_diagram(generator_layers),
+            'discriminator': self.generate_ascii_diagram(discriminator_layers)
+        }
+    
+    def generate_gan_comparison_html(self, gan_data: Dict[str, Any]) -> str:
+        """
+        Generate a combined HTML comparison view for GAN models.
+        Shows generator and discriminator side by side.
+        
+        Args:
+            gan_data: Dictionary with generator and discriminator layer data
+            
+        Returns:
+            HTML string for side-by-side GAN comparison
+        """
+        generator_layers = gan_data.get('generator', [])
+        discriminator_layers = gan_data.get('discriminator', [])
+        
+        html = '''<div class="gan-comparison-container">
+            <div class="gan-network-section">
+                <h3>Generator Network</h3>
+                <div class="gan-network-info">
+                    <p><strong>Layers:</strong> {}</p>
+                    <p><strong>Purpose:</strong> Generates fake images from noise</p>
+                </div>
+                <div class="layers-container">
+                    {}
+                </div>
+            </div>
+            
+            <div class="gan-flow-indicator">
+                <div class="flow-arrow">Fake Images</div>
+                <div class="flow-arrow">Real/Fake</div>
+            </div>
+            
+            <div class="gan-network-section">
+                <h3>Discriminator Network</h3>
+                <div class="gan-network-info">
+                    <p><strong>Layers:</strong> {}</p>
+                    <p><strong>Purpose:</strong> Distinguishes real from fake images</p>
+                </div>
+                <div class="layers-container">
+                    {}
+                </div>
+            </div>
+        </div>'''.format(
+            len(generator_layers),
+            '\n'.join([self._generate_layer_html(layer) for layer in generator_layers]),
+            len(discriminator_layers),
+            '\n'.join([self._generate_layer_html(layer) for layer in discriminator_layers])
+        )
+        
+        return html
+    
+    def get_gan_statistics(self, gan_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Generate statistics about the GAN models.
+        
+        Args:
+            gan_data: Dictionary with generator and discriminator layer data
+            
+        Returns:
+            Dictionary with statistics
+        """
+        generator_layers = gan_data.get('generator', [])
+        discriminator_layers = gan_data.get('discriminator', [])
+        
+        def count_layer_types(layers):
+            types = {}
+            for layer in layers:
+                layer_type = layer.get('type', 'Unknown')
+                types[layer_type] = types.get(layer_type, 0) + 1
+            return types
+        
+        def get_layer_inputs_outputs(layers):
+            inputs = set()
+            outputs = set()
+            for layer in layers:
+                inputs.update(layer.get('bottom', []))
+                outputs.update(layer.get('top', []))
+            return inputs, outputs
+        
+        gen_inputs, gen_outputs = get_layer_inputs_outputs(generator_layers)
+        disc_inputs, disc_outputs = get_layer_inputs_outputs(discriminator_layers)
+        
+        return {
+            'generator': {
+                'total_layers': len(generator_layers),
+                'layer_types': count_layer_types(generator_layers),
+                'input_blobs': list(gen_inputs),
+                'output_blobs': list(gen_outputs),
+            },
+            'discriminator': {
+                'total_layers': len(discriminator_layers),
+                'layer_types': count_layer_types(discriminator_layers),
+                'input_blobs': list(disc_inputs),
+                'output_blobs': list(disc_outputs),
+            }
+        }

@@ -40,17 +40,51 @@ function displayModels(models) {
         return;
     }
 
-    container.innerHTML = models.map(model => `
-        <a href="/visualization/${model.name}" class="model-card">
-            <h3>${model.name}</h3>
-            ${model.proto_file ? `<p><strong>Proto:</strong> ${getFileName(model.proto_file)}</p>` : ''}
-            ${model.model_file ? `<p><strong>Weights:</strong> ${getFileName(model.model_file)}</p>` : ''}
-            <div class="size">
-                ${model.size_mb > 0 ? `Weights: ${model.size_mb} MB` : ''}
-                ${model.proto_size_mb > 0 ? `Proto: ${model.proto_size_mb} MB` : ''}
-            </div>
-        </a>
-    `).join('');
+    const standardModels = models.filter(m => m.model_type !== 'gan');
+    const ganModels = models.filter(m => m.model_type === 'gan');
+    
+    let html = '';
+    
+    // Add GAN models with special styling
+    if (ganModels.length > 0) {
+        html += '<div style="grid-column: 1/-1; margin-bottom: 20px;"><h3 style="color: #667eea; margin: 0 0 15px 0;">🧠 GAN Models</h3></div>';
+        html += ganModels.map(model => `
+            <a href="/visualization/gan/${model.name}" class="model-card gan-model-card">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                    <h3 style="margin: 0; flex: 1;">${model.name}</h3>
+                    <span style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: bold;">GAN</span>
+                </div>
+                ${model.generator_proto ? `<p><strong>Generator:</strong> ${getFileName(model.generator_proto)}</p>` : ''}
+                ${model.discriminator_proto ? `<p><strong>Discriminator:</strong> ${getFileName(model.discriminator_proto)}</p>` : ''}
+                <div class="size">
+                    ${model.generator_size_mb > 0 ? `Gen: ${model.generator_size_mb} MB | ` : ''}
+                    ${model.discriminator_size_mb > 0 ? `Disc: ${model.discriminator_size_mb} MB | ` : ''}
+                    ${model.total_size_mb > 0 ? `Total: ${model.total_size_mb} MB` : ''}
+                </div>
+                ${model.iteration > 0 ? `<p><strong>Iteration:</strong> ${model.iteration}</p>` : ''}
+            </a>
+        `).join('');
+    }
+    
+    // Add standard models
+    if (standardModels.length > 0) {
+        if (ganModels.length > 0) {
+            html += '<div style="grid-column: 1/-1; margin-top: 30px; margin-bottom: 20px;"><h3 style="margin: 0 0 15px 0;">Standard Models</h3></div>';
+        }
+        html += standardModels.map(model => `
+            <a href="/visualization/${model.name}" class="model-card">
+                <h3>${model.name}</h3>
+                ${model.proto_file ? `<p><strong>Proto:</strong> ${getFileName(model.proto_file)}</p>` : ''}
+                ${model.model_file ? `<p><strong>Weights:</strong> ${getFileName(model.model_file)}</p>` : ''}
+                <div class="size">
+                    ${model.size_mb > 0 ? `Weights: ${model.size_mb} MB` : ''}
+                    ${model.proto_size_mb > 0 ? `Proto: ${model.proto_size_mb} MB` : ''}
+                </div>
+            </a>
+        `).join('');
+    }
+    
+    container.innerHTML = html;
 }
 
 /**
