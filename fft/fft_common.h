@@ -32,6 +32,8 @@ typedef struct {
     const char *output_file;
     int test_image_size; // Added to specify size of generated test image
     int max_gpus; // Maximum number of GPUs to use in multi-GPU mode
+    const char *results_folder; // Folder where results will be saved
+    const char *output_prefix; // Prefix for output filenames
 } FFTConfig;
 
 // Configuration struct for batch processing
@@ -58,6 +60,8 @@ void savePPM(const char *filename, const unsigned char *data, int width, int hei
 void printDeviceInfo();
 int getAvailableGPUs();
 double getCurrentMs();
+int createDirectoryIfNotExists(const char *path);
+void buildOutputPath(const char *results_folder, const char *prefix, const char *filename, char *full_path, size_t max_len);
 
 // ================================================================================
 // GPU context management

@@ -126,6 +126,11 @@ void computeFFTMultiGPU(GPUContext **contexts, int num_gpus, const ImageData *im
 void performFFTReconstruction(const FFTConfig *config) {
     printf("\n=== FFT 2D Image Reconstruction ===\n");
     
+    // Create results folder if it doesn't exist
+    if (createDirectoryIfNotExists(config->results_folder) != 0) {
+        fprintf(stderr, "Warning: Could not create results folder %s\n", config->results_folder);
+    }
+    
     // Generate test image if no input file
     ImageData *img = NULL;
     bool generated_image = false;
@@ -185,13 +190,22 @@ void performFFTReconstruction(const FFTConfig *config) {
     
     // Save results
     if (config->output_file) {
+        char original_output[512];
+        char reconstructed_output[512];
+        
+        // Build output file paths
+        buildOutputPath(config->results_folder, config->output_prefix, config->output_file, reconstructed_output, sizeof(reconstructed_output));
+        
+        // Build original file path: original_{prefix}{output_file}
+        char original_filename[256];
+        snprintf(original_filename, sizeof(original_filename), "original_%s", config->output_file);
+        buildOutputPath(config->results_folder, config->output_prefix, original_filename, original_output, sizeof(original_output));
+        
         // Save the original image for comparison
-        char original_output[256];
-        snprintf(original_output, sizeof(original_output), "original_%s", config->output_file);
         savePPM(original_output, img->data, img->width, img->height);
         
         // Save the reconstructed image
-        savePPM(config->output_file, result, img->width, img->height);
+        savePPM(reconstructed_output, result, img->width, img->height);
     }
     
     free(result);
@@ -222,6 +236,11 @@ int main(int argc, char *argv[]) {
            config.input_file ? config.input_file : "not set");
     printf("  Test Image Size: %dx%d (FFT_TEST_IMAGE_SIZE=%d)\n", 
            config.test_image_size, config.test_image_size, config.test_image_size);
+    printf("  Results Folder: %s (FFT_RESULTS_FOLDER=%s)\n", 
+           config.results_folder, config.results_folder);
+    printf("  Output Prefix: %s (FFT_OUTPUT_PREFIX=%s)\n", 
+           strlen(config.output_prefix) > 0 ? config.output_prefix : "(none)", 
+           strlen(config.output_prefix) > 0 ? config.output_prefix : "not set");
     
     performFFTReconstruction(&config);
     

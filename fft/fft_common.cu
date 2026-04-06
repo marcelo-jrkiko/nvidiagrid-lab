@@ -5,6 +5,8 @@
 #include <ctype.h>
 #include <time.h>
 #include <sys/time.h>
+#include <sys/stat.h>
+#include <errno.h>
 
 // ================================================================================
 // Utility functions for multi-GPU management
@@ -35,6 +37,53 @@ double getCurrentMs() {
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return tv.tv_sec * 1000.0 + tv.tv_usec / 1000.0;
+}
+
+// Create directory if it doesn't exist
+int createDirectoryIfNotExists(const char *path) {
+    if (!path) return -1;
+    
+    struct stat st = {0};
+    if (stat(path, &st) == 0) {
+        // Path exists
+        if (S_ISDIR(st.st_mode)) {
+            // It's a directory, all good
+            return 0;
+        } else {
+            // It exists but is not a directory
+            fprintf(stderr, "Error: %s exists but is not a directory\n", path);
+            return -1;
+        }
+    }
+    
+    // Directory doesn't exist, create it
+    #ifdef _WIN32
+        if (_mkdir(path) != 0) {
+            fprintf(stderr, "Failed to create directory: %s\n", path);
+            return -1;
+        }
+    #else
+        if (mkdir(path, 0755) != 0) {
+            fprintf(stderr, "Failed to create directory: %s\n", path);
+            perror("mkdir");
+            return -1;
+        }
+    #endif
+    
+    return 0;
+}
+
+// Build full output path with folder and prefix
+void buildOutputPath(const char *results_folder, const char *prefix, const char *filename, char *full_path, size_t max_len) {
+    if (!results_folder || !filename || !full_path || max_len == 0) {
+        return;
+    }
+    
+    if (prefix && strlen(prefix) > 0) {
+        snprintf(full_path, max_len, "%s/%s%s", results_folder, prefix, filename);
+    } else {
+        snprintf(full_path, max_len, "%s/%s", results_folder, filename);
+    }
 }
 
 // ================================================================================
@@ -298,6 +347,8 @@ FFTConfig loadFFTConfig() {
     config.output_file = "fft_output.ppm";
     config.test_image_size = 256;
     config.max_gpus = 1; // Default max GPUs to use
+    config.results_folder = "./results"; // Default results folder
+    config.output_prefix = ""; // Default: no prefix
     
     // Load use_multi_gpu from environment
     const char *env_multi_gpu = getenv("FFT_USE_MULTI_GPU");
@@ -330,6 +381,18 @@ FFTConfig loadFFTConfig() {
     }
     else {
         config.max_gpus = getAvailableGPUs(); // Default to all available GPUs if not set
+    }
+    
+    // Load results folder from environment
+    const char *env_results_folder = getenv("FFT_RESULTS_FOLDER");
+    if (env_results_folder != NULL) {
+        config.results_folder = env_results_folder;
+    }
+    
+    // Load output prefix from environment
+    const char *env_output_prefix = getenv("FFT_OUTPUT_PREFIX");
+    if (env_output_prefix != NULL) {
+        config.output_prefix = env_output_prefix;
     }
     
     return config;
