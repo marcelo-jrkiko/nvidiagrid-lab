@@ -203,6 +203,60 @@ Update `NVCCFLAGS` in Makefile:
 -arch=sm_30 -arch=sm_52 -arch=sm_61
 ```
 
+## PPM to JPG Conversion
+
+After running the FFT computation, you can convert the PPM output files to JPG format using the included Python script.
+
+### Setup
+
+Install Python dependencies:
+```bash
+pip install -r requirements-python.txt
+```
+
+### Usage
+
+**Basic conversion:**
+```bash
+python3 convert_ppm_to_jpg.py
+```
+
+**With quality setting (1-100):**
+```bash
+python3 convert_ppm_to_jpg.py --quality=90
+```
+
+**Keep original PPM files:**
+```bash
+python3 convert_ppm_to_jpg.py --keep-ppm
+```
+
+### Environment Variables
+
+The conversion script uses the following environment variables:
+
+- `FFT_RESULTS_FOLDER` - Path to results folder (default: `./results`)
+- `JPG_QUALITY` - JPEG quality level 1-100 (default: 85)
+- `DELETE_PPM` - Delete original PPM files after conversion (default: false)
+
+### Example Workflow
+
+```bash
+# 1. Run FFT processing
+export FFT_RESULTS_FOLDER=./output
+export FFT_OUTPUT_PREFIX=exp1_
+export FFT_OUTPUT_FILE=reconstruction.ppm
+./fft_2d_multi_gpu
+
+# 2. Convert results to JPG
+export JPG_QUALITY=90
+python3 convert_ppm_to_jpg.py
+
+# Results will be in ./output/:
+# - exp1_original_reconstruction.jpg
+# - exp1_reconstruction.jpg
+```
+
 ## Troubleshooting
 
 ### "No CUDA devices found"
