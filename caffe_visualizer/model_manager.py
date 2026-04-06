@@ -275,10 +275,15 @@ class CaffeModelManager:
                 model_pairs[model_name] = {}
             model_pairs[model_name]['model'] = filepath
         
-        # Create ModelInfo objects
+        # Create ModelInfo objects - only for models with proto files
         for model_name, files in model_pairs.items():
             proto_path = files.get('proto')
             model_path = files.get('model')
+            
+            # Skip models without proto files - they cannot be visualized
+            if not proto_path:
+                logging.debug(f"Skipping model: {model_name}, proto: {proto_path}, model: {model_path} (no proto file)")
+                continue
             
             logging.debug(f"Processing model: {model_name}, proto: {proto_path}, model: {model_path}")
             
