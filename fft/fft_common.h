@@ -94,6 +94,8 @@ __global__ void complexToFloatReal(const cufftComplex *input, float *output,
 FFTConfig loadFFTConfig();
 BatchConfig loadBatchConfig();
 
+double get_current_time_ms();
+double elapsed_time_ms(double start_time, double end_time);
 
 #define CUDA_CHECK(call) \
     do { \

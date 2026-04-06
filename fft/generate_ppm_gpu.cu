@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <sys/time.h>
 #include <cuda_runtime.h>
 #include <curand_kernel.h>
 #include <omp.h>
@@ -438,16 +439,25 @@ int main()
     long long total_pixels = (long long)width * height;
     printf("  Total pixels:     %lld (%.2f MP)\n", total_pixels, total_pixels / 1000000.0);
     
+    // Start overall timing
+    double overall_start = get_current_time_ms();
+    printf("\n=== Starting Generation Process ===\n");
+    
     // Allocate unified output buffer
     size_t pixel_bytes = total_pixels * 3;
+    double alloc_start = get_current_time_ms();
     unsigned char *h_output = (unsigned char *)malloc(pixel_bytes);
+    double alloc_time = elapsed_time_ms(alloc_start, get_current_time_ms());
+    
     if (!h_output) {
         fprintf(stderr, "Error: Cannot allocate host memory (%.2f GB)\n", 
                 pixel_bytes / (1024.0 * 1024.0 * 1024.0));
         return 1;
     }
+    printf("  Host memory allocation: %.2f ms\n", alloc_time);
     
     // Generate image using single or multi-GPU mode
+    double gen_start = get_current_time_ms();
     if (use_multi_gpu && num_gpus > 1 && available_gpus > 1) {
         generate_on_multi_gpu(output_file, width, height, seed, num_gpus, h_output);
     } else {
@@ -456,9 +466,24 @@ int main()
         }
         generate_on_single_gpu(output_file, width, height, seed, h_output);
     }
+    double gen_time = elapsed_time_ms(gen_start, get_current_time_ms());
     
     // Write PPM file
+    double file_start = get_current_time_ms();
     write_ppm_file(output_file, width, height, h_output, total_pixels);
+    double file_time = elapsed_time_ms(file_start, get_current_time_ms());
+    
+    // Calculate total time
+    double overall_end = get_current_time_ms();
+    double total_elapsed = elapsed_time_ms(overall_start, overall_end);
+    
+    // Print timing summary
+    printf("\n=== Execution Summary ===\n");
+    printf("  Host allocation time: %.2f ms\n", alloc_time);
+    printf("  GPU generation time:  %.2f ms\n", gen_time);
+    printf("  File write time:      %.2f ms\n", file_time);
+    printf("  Total elapsed time:   %.2f ms (%.2f seconds)\n", total_elapsed, total_elapsed / 1000.0);
+    printf("  Generation speed:     %.2f MP/s\n", total_pixels / 1000000.0 / (gen_time / 1000.0));
     
     // Cleanup
     printf("\nCleaning up...\n");

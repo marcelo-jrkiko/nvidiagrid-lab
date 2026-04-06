@@ -9,6 +9,30 @@
 #include <errno.h>
 
 
+
+// ==================================================================================
+// Timing Helper Functions
+// ==================================================================================
+
+/**
+ * Get current time in milliseconds
+ */
+double get_current_time_ms()
+{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (tv.tv_sec * 1000.0) + (tv.tv_usec / 1000.0);
+}
+
+/**
+ * Calculate elapsed time between two time points in milliseconds
+ */
+double elapsed_time_ms(double start_time, double end_time)
+{
+    return end_time - start_time;
+}
+
+
 // ================================================================================
 // Utility functions for multi-GPU management
 // ================================================================================
