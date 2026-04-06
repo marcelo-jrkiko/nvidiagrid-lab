@@ -15,6 +15,8 @@
  *   ./generate_ppm_gpu
  */
 
+
+#include "fft_common.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,7 +26,6 @@
 #include <curand_kernel.h>
 #include <omp.h>
 #include "dotenv.h"
-#include "fft_common.h"
 
 
 #define THREADS_PER_BLOCK_X 32
