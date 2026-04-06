@@ -8,9 +8,41 @@
 #include <sys/stat.h>
 #include <errno.h>
 
+
 // ================================================================================
 // Utility functions for multi-GPU management
 // ================================================================================
+
+
+/**
+ * Check GPU memory for multi-GPU operation
+ */
+void check_gpu_memory_multi(int num_gpus, long long total_pixels)
+{
+    printf("\nGPU Memory Status (Multi-GPU):\n");
+    
+    long long pixel_memory = total_pixels * 3;  // RGB bytes
+    long long state_memory = total_pixels * sizeof(curandState);
+    long long total_needed = pixel_memory + state_memory;
+    
+    for (int i = 0; i < num_gpus; i++) {
+        CUDA_CHECK(cudaSetDevice(i));
+        size_t free_memory, total_memory;
+        CUDA_CHECK(cudaMemGetInfo(&free_memory, &total_memory));
+        
+        printf("GPU %d:\n", i);
+        printf("  Total memory:     %.2f GB\n", total_memory / (1024.0 * 1024.0 * 1024.0));
+        printf("  Free memory:      %.2f GB\n", free_memory / (1024.0 * 1024.0 * 1024.0));
+        printf("  Memory needed:    %.2f GB\n", total_needed / (1024.0 * 1024.0 * 1024.0));
+        
+        if ((long long)free_memory < total_needed) {
+            fprintf(stderr, "  ⚠ WARNING: Not enough memory on GPU %d!\n", i);
+        } else {
+            printf("  ✓ OK\n");
+        }
+    }
+}
+
 
 void printDeviceInfo() {
     int deviceCount = 0;
@@ -252,6 +284,37 @@ GPUContext* allocateGPUContext(int gpu_id, int width, int height) {
     
     return ctx;
 }
+
+
+/**
+ * Check GPU memory availability
+ */
+void check_gpu_memory(long long total_pixels)
+{
+    size_t free_memory, total_memory;
+    CUDA_CHECK(cudaMemGetInfo(&free_memory, &total_memory));
+    
+    // Memory needed: pixel data (RGB) + curand states
+    long long pixel_memory = total_pixels * 3;  // RGB bytes
+    long long state_memory = total_pixels * sizeof(curandState);
+    long long total_needed = pixel_memory + state_memory;
+    
+    printf("\nGPU Memory Status:\n");
+    printf("  Total GPU memory: %.2f GB\n", total_memory / (1024.0 * 1024.0 * 1024.0));
+    printf("  Free GPU memory:  %.2f GB\n", free_memory / (1024.0 * 1024.0 * 1024.0));
+    printf("  Memory needed:    %.2f GB\n", total_needed / (1024.0 * 1024.0 * 1024.0));
+    printf("    - Pixel data:   %.2f GB\n", pixel_memory / (1024.0 * 1024.0 * 1024.0));
+    printf("    - curand state: %.2f GB\n", state_memory / (1024.0 * 1024.0 * 1024.0));
+    
+    if ((long long)free_memory < total_needed) {
+        fprintf(stderr, "\n⚠ WARNING: Not enough GPU memory!\n");
+        fprintf(stderr, "  Need: %.2f GB, Available: %.2f GB\n",
+                total_needed / (1024.0 * 1024.0 * 1024.0),
+                free_memory / (1024.0 * 1024.0 * 1024.0));
+        fprintf(stderr, "  Consider reducing width or height.\n");
+    }
+}
+
 
 void freeGPUContext(GPUContext *ctx) {
     if (ctx) {

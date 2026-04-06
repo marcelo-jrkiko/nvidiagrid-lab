@@ -21,20 +21,27 @@
 #include <time.h>
 #include <cuda_runtime.h>
 #include <curand_kernel.h>
+#include <omp.h>
 #include "dotenv.h"
+#include "fft_common.h"
 
-#define CUDA_CHECK(call) \
-    do { \
-        cudaError_t error = call; \
-        if (error != cudaSuccess) { \
-            fprintf(stderr, "CUDA Error at %s:%d - %s\n", __FILE__, __LINE__, \
-                    cudaGetErrorString(error)); \
-            exit(1); \
-        } \
-    } while(0)
 
 #define THREADS_PER_BLOCK_X 32
 #define THREADS_PER_BLOCK_Y 16
+
+// GPU context structure for multi-GPU processing
+typedef struct {
+    int gpu_id;
+    int start_row;
+    int end_row;
+    int num_rows;
+    int width;
+    unsigned char *d_output;
+    curandState *d_states;
+    cudaEvent_t start_event;
+    cudaEvent_t stop_event;
+    float execution_time;
+} GPUWork;
 
 // ==================================================================================
 // CUDA Kernels
@@ -165,100 +172,24 @@ void write_ppm_file(const char *filename, int width, int height,
 }
 
 /**
- * Check GPU memory availability
+ * Single GPU generation wrapper
  */
-void check_gpu_memory(long long total_pixels)
+void generate_on_single_gpu(const char *output_file, int width, int height, 
+                            unsigned int seed, unsigned char *h_output)
 {
-    size_t free_memory, total_memory;
-    CUDA_CHECK(cudaMemGetInfo(&free_memory, &total_memory));
-    
-    // Memory needed: pixel data (RGB) + curand states
-    long long pixel_memory = total_pixels * 3;  // RGB bytes
-    long long state_memory = total_pixels * sizeof(curandState);
-    long long total_needed = pixel_memory + state_memory;
-    
-    printf("\nGPU Memory Status:\n");
-    printf("  Total GPU memory: %.2f GB\n", total_memory / (1024.0 * 1024.0 * 1024.0));
-    printf("  Free GPU memory:  %.2f GB\n", free_memory / (1024.0 * 1024.0 * 1024.0));
-    printf("  Memory needed:    %.2f GB\n", total_needed / (1024.0 * 1024.0 * 1024.0));
-    printf("    - Pixel data:   %.2f GB\n", pixel_memory / (1024.0 * 1024.0 * 1024.0));
-    printf("    - curand state: %.2f GB\n", state_memory / (1024.0 * 1024.0 * 1024.0));
-    
-    if ((long long)free_memory < total_needed) {
-        fprintf(stderr, "\n⚠ WARNING: Not enough GPU memory!\n");
-        fprintf(stderr, "  Need: %.2f GB, Available: %.2f GB\n",
-                total_needed / (1024.0 * 1024.0 * 1024.0),
-                free_memory / (1024.0 * 1024.0 * 1024.0));
-        fprintf(stderr, "  Consider reducing width or height.\n");
-    }
-}
-
-/**
- * Print device information
- */
-void print_device_info()
-{
-    int device;
-    struct cudaDeviceProp props;
-    
-    CUDA_CHECK(cudaGetDevice(&device));
-    CUDA_CHECK(cudaGetDeviceProperties(&props, device));
-    
-    printf("\nGPU Device Information:\n");
-    printf("  Device: %s\n", props.name);
-    printf("  Compute Capability: %d.%d\n", props.major, props.minor);
-    printf("  Total Memory: %.2f GB\n", props.totalGlobalMem / (1024.0 * 1024.0 * 1024.0));
-    printf("  Max Threads per Block: %d\n", props.maxThreadsPerBlock);
-}
-
-// ==================================================================================
-// Main Function
-// ==================================================================================
-
-int main()
-{
-    printf("=================================================================\n");
-    printf("CUDA GPU-Accelerated PPM Image Generator\n");
-    printf("=================================================================\n\n");
-    
-    // Load environment variables from .env file
-    dotenv::init();
-    
-    // Get parameters from environment variables
-    const char *output_file = get_env_string("PPM_OUTPUT_FILE", "generated_image.ppm");
-    int width = get_env_int("PPM_WIDTH", 1024);
-    int height = get_env_int("PPM_HEIGHT", 1024);
-    unsigned int seed = (unsigned int)get_env_int("PPM_SEED", (int)time(NULL));
-    
-    printf("Configuration:\n");
-    printf("  Output file: %s\n", output_file);
-    printf("  Width:       %d\n", width);
-    printf("  Height:      %d\n", height);
-    printf("  Seed:        %u\n", seed);
-    
-    // Validate dimensions
-    if (width <= 0 || height <= 0) {
-        fprintf(stderr, "Error: Invalid dimensions (width=%d, height=%d)\n", width, height);
-        return 1;
-    }
+    printf("\n=== Single GPU Generation ===\n");
     
     long long total_pixels = (long long)width * height;
+    size_t pixel_bytes = total_pixels * 3;
+    size_t state_bytes = total_pixels * sizeof(curandState);
     
-    printf("  Total pixels: %lld (%.2f MP)\n", total_pixels, total_pixels / 1000000.0);
-    
-    // Print device info
-    print_device_info();
-    
-    // Check GPU memory
+    printDeviceInfo();
     check_gpu_memory(total_pixels);
     
     // Allocate GPU memory
     printf("\nAllocating GPU memory...\n");
     unsigned char *d_output;
     curandState *d_states;
-    
-    size_t pixel_bytes = total_pixels * 3;
-    size_t state_bytes = total_pixels * sizeof(curandState);
     
     CUDA_CHECK(cudaMalloc(&d_output, pixel_bytes));
     CUDA_CHECK(cudaMalloc(&d_states, state_bytes));
@@ -296,14 +227,6 @@ int main()
     
     // Copy result back to host
     printf("Copying image data from GPU to host...\n");
-    unsigned char *h_output = (unsigned char *)malloc(pixel_bytes);
-    if (!h_output) {
-        fprintf(stderr, "Error: Cannot allocate host memory\n");
-        CUDA_CHECK(cudaFree(d_output));
-        CUDA_CHECK(cudaFree(d_states));
-        return 1;
-    }
-    
     CUDA_CHECK(cudaEventRecord(start));
     CUDA_CHECK(cudaMemcpy(h_output, d_output, pixel_bytes, cudaMemcpyDeviceToHost));
     CUDA_CHECK(cudaEventRecord(stop));
@@ -314,15 +237,231 @@ int main()
     printf("  Transfer rate: %.2f GB/s\n", 
            (pixel_bytes / (1024.0 * 1024.0 * 1024.0)) / (milliseconds / 1000.0));
     
+    // Cleanup
+    CUDA_CHECK(cudaEventDestroy(start));
+    CUDA_CHECK(cudaEventDestroy(stop));
+    CUDA_CHECK(cudaFree(d_output));
+    CUDA_CHECK(cudaFree(d_states));
+}
+
+/**
+ * Multi-GPU generation function
+ */
+void generate_on_multi_gpu(const char *output_file, int width, int height, 
+                           unsigned int seed, int num_gpus, unsigned char *h_output)
+{
+    printf("\n=== Multi-GPU Generation (using %d GPUs) ===\n", num_gpus);
+    
+    long long total_pixels = (long long)width * height;
+    size_t pixel_bytes = total_pixels * 3;
+    
+    printDeviceInfo();
+    check_gpu_memory_multi(num_gpus, total_pixels);
+    
+    // Allocate GPU work descriptors
+    GPUWork **gpu_works = (GPUWork **)malloc(num_gpus * sizeof(GPUWork *));
+    
+    // Divide work among GPUs (vertical strips)
+    int rows_per_gpu = height / num_gpus;
+    int remaining_rows = height % num_gpus;
+    
+    printf("\nAllocating GPU memory...\n");
+    printf("  Rows per GPU: %d (with %d remainder rows)\n", rows_per_gpu, remaining_rows);
+    
+    // OpenMP parallel allocation
+    #pragma omp parallel for num_threads(num_gpus)
+    for (int gpu_id = 0; gpu_id < num_gpus; gpu_id++) {
+        CUDA_CHECK(cudaSetDevice(gpu_id));
+        
+        // Calculate row range for this GPU
+        int start_row = gpu_id * rows_per_gpu + (gpu_id < remaining_rows ? gpu_id : remaining_rows);
+        int end_row = start_row + rows_per_gpu + (gpu_id < remaining_rows ? 1 : 0);
+        int num_rows = end_row - start_row;
+        
+        long long gpu_total_pixels = (long long)width * num_rows;
+        size_t gpu_pixel_bytes = gpu_total_pixels * 3;
+        size_t gpu_state_bytes = gpu_total_pixels * sizeof(curandState);
+        
+        // Allocate work descriptor
+        gpu_works[gpu_id] = (GPUWork *)malloc(sizeof(GPUWork));
+        gpu_works[gpu_id]->gpu_id = gpu_id;
+        gpu_works[gpu_id]->start_row = start_row;
+        gpu_works[gpu_id]->end_row = end_row;
+        gpu_works[gpu_id]->num_rows = num_rows;
+        gpu_works[gpu_id]->width = width;
+        
+        // Allocate GPU memory for this work unit
+        CUDA_CHECK(cudaMalloc(&gpu_works[gpu_id]->d_output, gpu_pixel_bytes));
+        CUDA_CHECK(cudaMalloc(&gpu_works[gpu_id]->d_states, gpu_state_bytes));
+        CUDA_CHECK(cudaEventCreate(&gpu_works[gpu_id]->start_event));
+        CUDA_CHECK(cudaEventCreate(&gpu_works[gpu_id]->stop_event));
+        
+        printf("  GPU %d: rows %d-%d (%d rows, %.2f MB)\n", 
+               gpu_id, start_row, end_row - 1, num_rows, 
+               gpu_pixel_bytes / (1024.0 * 1024.0));
+    }
+    
+    printf("✓ GPU memory allocated\n");
+    
+    // Initialize and generate on all GPUs in parallel
+    double total_gen_time = 0, total_transfer_time = 0;
+    
+    #pragma omp parallel for num_threads(num_gpus) reduction(+:total_gen_time, total_transfer_time)
+    for (int gpu_id = 0; gpu_id < num_gpus; gpu_id++) {
+        CUDA_CHECK(cudaSetDevice(gpu_id));
+        GPUWork *work = gpu_works[gpu_id];
+        
+        long long gpu_total_pixels = (long long)work->width * work->num_rows;
+        
+        // Calculate grid and block dimensions
+        dim3 blockSize(THREADS_PER_BLOCK_X, THREADS_PER_BLOCK_Y);
+        dim3 gridSize((work->width + blockSize.x - 1) / blockSize.x,
+                      (work->num_rows + blockSize.y - 1) / blockSize.y);
+        
+        // Initialize random states
+        printf("GPU %d: Initializing random states...\n", gpu_id);
+        init_curand_states<<<gridSize, blockSize>>>(work->d_states, seed + gpu_id, 
+                                                    work->width, work->num_rows);
+        CUDA_CHECK(cudaGetLastError());
+        CUDA_CHECK(cudaDeviceSynchronize());
+        
+        // Generate image
+        printf("GPU %d: Generating %lld pixels...\n", gpu_id, gpu_total_pixels);
+        CUDA_CHECK(cudaEventRecord(work->start_event));
+        generate_random_image<<<gridSize, blockSize>>>(work->d_output, work->d_states, 
+                                                       work->width, work->num_rows);
+        CUDA_CHECK(cudaEventRecord(work->stop_event));
+        CUDA_CHECK(cudaEventSynchronize(work->stop_event));
+        
+        float milliseconds = 0;
+        CUDA_CHECK(cudaEventElapsedTime(&milliseconds, work->start_event, work->stop_event));
+        work->execution_time = milliseconds;
+        total_gen_time += milliseconds;
+        printf("GPU %d: Generation completed in %.2f ms\n", gpu_id, milliseconds);
+    }
+    
+    // Gather results from all GPUs
+    printf("\nGathering results from GPUs...\n");
+    
+    #pragma omp parallel for num_threads(num_gpus) reduction(+:total_transfer_time)
+    for (int gpu_id = 0; gpu_id < num_gpus; gpu_id++) {
+        CUDA_CHECK(cudaSetDevice(gpu_id));
+        GPUWork *work = gpu_works[gpu_id];
+        
+        long long gpu_total_pixels = (long long)work->width * work->num_rows;
+        size_t gpu_pixel_bytes = gpu_total_pixels * 3;
+        
+        // Calculate output offset
+        long long output_offset = (long long)work->start_row * work->width * 3;
+        
+        printf("GPU %d: Transferring %lld bytes from device...\n", gpu_id, gpu_pixel_bytes);
+        
+        CUDA_CHECK(cudaEventRecord(work->start_event));
+        CUDA_CHECK(cudaMemcpy(h_output + output_offset, work->d_output, 
+                             gpu_pixel_bytes, cudaMemcpyDeviceToHost));
+        CUDA_CHECK(cudaEventRecord(work->stop_event));
+        CUDA_CHECK(cudaEventSynchronize(work->stop_event));
+        
+        float milliseconds = 0;
+        CUDA_CHECK(cudaEventElapsedTime(&milliseconds, work->start_event, work->stop_event));
+        total_transfer_time += milliseconds;
+        printf("GPU %d: Transfer completed in %.2f ms\n", gpu_id, milliseconds);
+    }
+    
+    // Print performance summary
+    printf("\n=== Multi-GPU Performance Summary ===\n");
+    printf("  Total generation time: %.2f ms\n", total_gen_time);
+    printf("  Total transfer time:   %.2f ms\n", total_transfer_time);
+    printf("  Average gen time per GPU: %.2f ms\n", total_gen_time / num_gpus);
+    printf("  Average transfer rate per GPU: %.2f GB/s\n", 
+           (pixel_bytes / (1024.0 * 1024.0 * 1024.0 * num_gpus)) / (total_transfer_time / num_gpus / 1000.0));
+    
+    // Cleanup
+    printf("\nCleaning up GPU resources...\n");
+    for (int gpu_id = 0; gpu_id < num_gpus; gpu_id++) {
+        CUDA_CHECK(cudaSetDevice(gpu_id));
+        CUDA_CHECK(cudaFree(gpu_works[gpu_id]->d_output));
+        CUDA_CHECK(cudaFree(gpu_works[gpu_id]->d_states));
+        CUDA_CHECK(cudaEventDestroy(gpu_works[gpu_id]->start_event));
+        CUDA_CHECK(cudaEventDestroy(gpu_works[gpu_id]->stop_event));
+        free(gpu_works[gpu_id]);
+    }
+    free(gpu_works);
+}
+
+// ==================================================================================
+// Main Function
+// ==================================================================================
+
+int main()
+{
+    printf("=================================================================\n");
+    printf("CUDA GPU-Accelerated PPM Image Generator (Multi-GPU Support)\n");
+    printf("=================================================================\n\n");
+    
+    // Load environment variables from .env file
+    dotenv::init();
+    
+    // Get parameters from environment variables
+    const char *output_file = get_env_string("PPM_OUTPUT_FILE", "generated_image.ppm");
+    int width = get_env_int("PPM_WIDTH", 1024);
+    int height = get_env_int("PPM_HEIGHT", 1024);
+    unsigned int seed = (unsigned int)get_env_int("PPM_SEED", (int)time(NULL));
+    int use_multi_gpu = get_env_int("PPM_USE_MULTI_GPU", 0);
+    int max_gpus = get_env_int("PPM_MAX_GPUS", 1);
+    
+    // Validate dimensions
+    if (width <= 0 || height <= 0) {
+        fprintf(stderr, "Error: Invalid dimensions (width=%d, height=%d)\n", width, height);
+        return 1;
+    }
+    
+    // Get actual number of available GPUs
+    int available_gpus = getAvailableGPUs();
+    
+    if (available_gpus == 0) {
+        fprintf(stderr, "Error: No CUDA devices found!\n");
+        return 1;
+    }
+    
+    // Limit to available GPUs or requested maximum
+    int num_gpus = (use_multi_gpu) ? ((max_gpus < available_gpus) ? max_gpus : available_gpus) : 1;
+    
+    printf("Configuration:\n");
+    printf("  Output file:      %s\n", output_file);
+    printf("  Width:            %d\n", width);
+    printf("  Height:           %d\n", height);
+    printf("  Seed:             %u\n", seed);
+    printf("  Multi-GPU mode:   %s\n", use_multi_gpu ? "Enabled" : "Disabled");
+    printf("  GPUs to use:      %d / %d available\n", num_gpus, available_gpus);
+    
+    long long total_pixels = (long long)width * height;
+    printf("  Total pixels:     %lld (%.2f MP)\n", total_pixels, total_pixels / 1000000.0);
+    
+    // Allocate unified output buffer
+    size_t pixel_bytes = total_pixels * 3;
+    unsigned char *h_output = (unsigned char *)malloc(pixel_bytes);
+    if (!h_output) {
+        fprintf(stderr, "Error: Cannot allocate host memory (%.2f GB)\n", 
+                pixel_bytes / (1024.0 * 1024.0 * 1024.0));
+        return 1;
+    }
+    
+    // Generate image using single or multi-GPU mode
+    if (use_multi_gpu && num_gpus > 1 && available_gpus > 1) {
+        generate_on_multi_gpu(output_file, width, height, seed, num_gpus, h_output);
+    } else {
+        if (use_multi_gpu && available_gpus == 1) {
+            printf("⚠ Warning: Multi-GPU mode requested but only 1 GPU available. Using single GPU.\n");
+        }
+        generate_on_single_gpu(output_file, width, height, seed, h_output);
+    }
+    
     // Write PPM file
     write_ppm_file(output_file, width, height, h_output, total_pixels);
     
     // Cleanup
     printf("\nCleaning up...\n");
-    CUDA_CHECK(cudaEventDestroy(start));
-    CUDA_CHECK(cudaEventDestroy(stop));
-    CUDA_CHECK(cudaFree(d_output));
-    CUDA_CHECK(cudaFree(d_states));
     free(h_output);
     
     printf("✓ Done!\n\n");

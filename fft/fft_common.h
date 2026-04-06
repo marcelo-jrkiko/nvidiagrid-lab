@@ -62,6 +62,8 @@ int getAvailableGPUs();
 double getCurrentMs();
 int createDirectoryIfNotExists(const char *path);
 void buildOutputPath(const char *results_folder, const char *prefix, const char *filename, char *full_path, size_t max_len);
+void check_gpu_memory_multi(int num_gpus, long long total_pixels);
+void check_gpu_memory(long long total_pixels);
 
 // ================================================================================
 // GPU context management
@@ -91,5 +93,16 @@ __global__ void complexToFloatReal(const cufftComplex *input, float *output,
 
 FFTConfig loadFFTConfig();
 BatchConfig loadBatchConfig();
+
+
+#define CUDA_CHECK(call) \
+    do { \
+        cudaError_t error = call; \
+        if (error != cudaSuccess) { \
+            fprintf(stderr, "CUDA Error at %s:%d - %s\n", __FILE__, __LINE__, \
+                    cudaGetErrorString(error)); \
+            exit(1); \
+        } \
+    } while(0)
 
 #endif // FFT_COMMON_H
