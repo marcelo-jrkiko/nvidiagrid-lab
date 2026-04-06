@@ -1,224 +1,7 @@
+#include "fft_common.h"
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <math.h>
-#include <cuda_runtime.h>
-#include <cufft.h>
 #include <omp.h>
-
-#define PI 3.14159265359f
-
-// ================================================================================
-// Utility functions for multi-GPU management
-// ================================================================================
-
-void printDeviceInfo() {
-    int deviceCount = 0;
-    cudaGetDeviceCount(&deviceCount);
-    printf("Number of CUDA devices: %d\n", deviceCount);
-    
-    for (int dev = 0; dev < deviceCount; ++dev) {
-        cudaDeviceProp prop;
-        cudaGetDeviceProperties(&prop, dev);
-        printf("\nDevice %d: %s\n", dev, prop.name);
-        printf("  Compute capability: %d.%d\n", prop.major, prop.minor);
-        printf("  Total global memory: %.0f MB\n", prop.totalGlobalMem / (1024.0f * 1024.0f));
-        printf("  Max threads per block: %d\n", prop.maxThreadsPerBlock);
-    }
-}
-
-int getAvailableGPUs() {
-    int deviceCount = 0;
-    cudaGetDeviceCount(&deviceCount);
-    return deviceCount;
-}
-
-// ================================================================================
-// Simple PPM image format for I/O
-// ================================================================================
-
-typedef struct {
-    int width;
-    int height;
-    unsigned char *data;  // RGB format: each pixel is 3 bytes (R,G,B)
-} ImageData;
-
-ImageData* createImage(int width, int height) {
-    ImageData *img = (ImageData *)malloc(sizeof(ImageData));
-    img->width = width;
-    img->height = height;
-    img->data = (unsigned char *)calloc(width * height * 3, sizeof(unsigned char));
-    return img;
-}
-
-void freeImage(ImageData *img) {
-    if (img) {
-        free(img->data);
-        free(img);
-    }
-}
-
-// Generate a simple test image with some patterns
-ImageData* generateTestImage(int width, int height) {
-    ImageData *img = createImage(width, height);
-    
-    // Create a simple pattern with gradients and circles
-    for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-            int idx = (y * width + x) * 3;
-            // Gradient
-            img->data[idx]     = (unsigned char)((x * 255) / width);      // R
-            img->data[idx + 1] = (unsigned char)((y * 255) / height);     // G
-            img->data[idx + 2] = (unsigned char)(((x + y) * 255) / (width + height)); // B
-        }
-    }
-    
-    // Add a white circle in the center
-    int cx = width / 2, cy = height / 2;
-    int radius = 50;
-    for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-            int dx = x - cx, dy = y - cy;
-            if (dx*dx + dy*dy < radius*radius) {
-                int idx = (y * width + x) * 3;
-                img->data[idx] = img->data[idx + 1] = img->data[idx + 2] = 255;
-            }
-        }
-    }
-    
-    return img;
-}
-
-void savePPM(const char *filename, const unsigned char *data, int width, int height) {
-    FILE *f = fopen(filename, "wb");
-    if (!f) {
-        fprintf(stderr, "Cannot open file %s for writing\n", filename);
-        return;
-    }
-    fprintf(f, "P6\n%d %d\n255\n", width, height);
-    fwrite(data, 1, width * height * 3, f);
-    fclose(f);
-    printf("Saved image to %s\n", filename);
-}
-
-// ================================================================================
-// GPU Memory allocation and transfer with multi-GPU support
-// ================================================================================
-
-typedef struct {
-    int gpu_id;
-    int width;
-    int height;
-    cufftComplex *fft_data;
-    float *gpu_image_r;
-    float *gpu_image_g;
-    float *gpu_image_b;
-    cufftHandle plan;
-} GPUContext;
-
-GPUContext* allocateGPUContext(int gpu_id, int width, int height) {
-    cudaSetDevice(gpu_id);
-    GPUContext *ctx = (GPUContext *)malloc(sizeof(GPUContext));
-    
-    ctx->gpu_id = gpu_id;
-    ctx->width = width;
-    ctx->height = height;
-    
-    size_t fft_size = width * height * sizeof(cufftComplex);
-    size_t img_size = width * height * sizeof(float);
-    
-    cudaMalloc((void **)&ctx->fft_data, fft_size);
-    cudaMalloc((void **)&ctx->gpu_image_r, img_size);
-    cudaMalloc((void **)&ctx->gpu_image_g, img_size);
-    cudaMalloc((void **)&ctx->gpu_image_b, img_size);
-    
-    // Create FFT plan for this GPU
-    cufftPlan2d(&ctx->plan, height, width, CUFFT_C2C);
-    
-    printf("GPU %d: Allocated %.1f MB for FFT computation\n", 
-           gpu_id, (fft_size + img_size * 3) / (1024.0f * 1024.0f));
-    
-    return ctx;
-}
-
-void freeGPUContext(GPUContext *ctx) {
-    if (ctx) {
-        cudaSetDevice(ctx->gpu_id);
-        cufftDestroy(ctx->plan);
-        cudaFree(ctx->fft_data);
-        cudaFree(ctx->gpu_image_r);
-        cudaFree(ctx->gpu_image_g);
-        cudaFree(ctx->gpu_image_b);
-        free(ctx);
-    }
-}
-
-// Kernel to convert unsigned char RGB to float
-__global__ void rgbToFloat(const unsigned char *rgb_data, float *r, float *g, float *b,
-                          int width, int height) {
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
-    
-    if (x < width && y < height) {
-        int idx = y * width + x;
-        int rgb_idx = idx * 3;
-        r[idx] = rgb_data[rgb_idx] / 255.0f;
-        g[idx] = rgb_data[rgb_idx + 1] / 255.0f;
-        b[idx] = rgb_data[rgb_idx + 2] / 255.0f;
-    }
-}
-
-// Kernel to convert complex FFT data back to float
-__global__ void floatToRGB(const float *r, const float *g, const float *b,
-                          unsigned char *rgb_data, int width, int height) {
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
-    
-    if (x < width && y < height) {
-        int idx = y * width + x;
-        int rgb_idx = idx * 3;
-        rgb_data[rgb_idx]     = (unsigned char)fminf(255.0f, fmaxf(0.0f, r[idx] * 255.0f));
-        rgb_data[rgb_idx + 1] = (unsigned char)fminf(255.0f, fmaxf(0.0f, g[idx] * 255.0f));
-        rgb_data[rgb_idx + 2] = (unsigned char)fminf(255.0f, fmaxf(0.0f, b[idx] * 255.0f));
-    }
-}
-
-// Kernel to convert float to complex
-__global__ void floatToComplex(const float *input, cufftComplex *output,
-                              int width, int height) {
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
-    
-    if (x < width && y < height) {
-        int idx = y * width + x;
-        output[idx].x = input[idx];
-        output[idx].y = 0.0f;
-    }
-}
-
-// Kernel to convert complex back to float (take magnitude and normalize)
-__global__ void complexToFloat(const cufftComplex *input, float *output,
-                              int width, int height, float scale) {
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
-    
-    if (x < width && y < height) {
-        int idx = y * width + x;
-        output[idx] = (input[idx].x * input[idx].x + input[idx].y * input[idx].y) * scale;
-    }
-}
-
-// Kernel to extract real part from complex
-__global__ void complexToFloatReal(const cufftComplex *input, float *output,
-                                  int width, int height, float scale) {
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
-    
-    if (x < width && y < height) {
-        int idx = y * width + x;
-        output[idx] = input[idx].x * scale;
-    }
-}
+#include "dotenv.h"
 
 // ================================================================================
 // FFT computation and reconstruction
@@ -340,19 +123,31 @@ void computeFFTMultiGPU(GPUContext **contexts, int num_gpus, const ImageData *im
 // Main FFT wrapper functions
 // ================================================================================
 
-void performFFTReconstruction(const char *input_file, const char *output_file, int use_multi_gpu) {
+void performFFTReconstruction(const FFTConfig *config) {
     printf("\n=== FFT 2D Image Reconstruction ===\n");
     
     // Generate test image if no input file
     ImageData *img = NULL;
-    if (input_file == NULL) {
-        printf("Generating test image (256x256)...\n");
-        img = generateTestImage(256, 256);
+    bool generated_image = false;
+
+    if (config->input_file == NULL) {
+        generated_image = true;
     } else {
-        printf("Loading image from: %s\n", input_file);
-        // In a complete implementation, you would load a real image here
-        img = generateTestImage(256, 256);
+        printf("Loading image from: %s\n", config->input_file);
+        img = loadPPM(config->input_file);
+        if (img == NULL) {
+            fprintf(stderr, "Failed to load image from %s, generating test image instead\n", config->input_file);
+            generated_image = true;
+        }
     }
+
+    if (generated_image)
+    {        
+        const int size = config->test_image_size;
+        printf("Generating test image (%dx%d)...\n", size, size);
+        img = generateTestImage(size, size);
+    }
+    
     
     int num_gpus = getAvailableGPUs();
     printf("Available GPUs: %d\n", num_gpus);
@@ -366,7 +161,7 @@ void performFFTReconstruction(const char *input_file, const char *output_file, i
     // Allocate result image
     unsigned char *result = (unsigned char *)malloc(img->width * img->height * 3);
     
-    if (use_multi_gpu && num_gpus > 1) {
+    if (config->use_multi_gpu && num_gpus > 1) {
         // Multi-GPU computation
         GPUContext **contexts = (GPUContext **)malloc(num_gpus * sizeof(GPUContext *));
         
@@ -389,8 +184,14 @@ void performFFTReconstruction(const char *input_file, const char *output_file, i
     }
     
     // Save results
-    if (output_file) {
-        savePPM(output_file, result, img->width, img->height);
+    if (config->output_file) {
+        // Save the original image for comparison
+        char original_output[256];
+        snprintf(original_output, sizeof(original_output), "original_%s", config->output_file);
+        savePPM(original_output, img->data, img->width, img->height);
+        
+        // Save the reconstructed image
+        savePPM(config->output_file, result, img->width, img->height);
     }
     
     free(result);
@@ -406,29 +207,23 @@ int main(int argc, char *argv[]) {
     printf("CUDA 2D FFT Image Reconstruction - Multi-GPU Support\n");
     printf("=====================================================\n\n");
     
+    dotenv::init(); // Load environment variables from .env file if present
     printDeviceInfo();
     
-    int use_multi_gpu = 0;
-    const char *input_file = NULL;
-    const char *output_file = "fft_output.ppm";
+    // Load configuration from environment variables
+    FFTConfig config = loadFFTConfig();
     
-    // Parse command line arguments
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-m") == 0 || strcmp(argv[i], "--multi-gpu") == 0) {
-            use_multi_gpu = 1;
-        } else if (strcmp(argv[i], "-o") == 0 || strcmp(argv[i], "--output") == 0) {
-            if (i + 1 < argc) output_file = argv[++i];
-        } else if (strcmp(argv[i], "-i") == 0 || strcmp(argv[i], "--input") == 0) {
-            if (i + 1 < argc) input_file = argv[++i];
-        }
-    }
+    printf("\nConfiguration (from environment variables):\n");
+    printf("  Multi-GPU: %s (FFT_USE_MULTI_GPU=%d)\n", 
+           config.use_multi_gpu ? "Enabled" : "Disabled", config.use_multi_gpu);
+    printf("  Output: %s (FFT_OUTPUT_FILE=%s)\n", config.output_file, config.output_file ? config.output_file : "not set");
+    printf("  Input: %s (FFT_INPUT_FILE=%s)\n", 
+           config.input_file ? config.input_file : "(generated)", 
+           config.input_file ? config.input_file : "not set");
+    printf("  Test Image Size: %dx%d (FFT_TEST_IMAGE_SIZE=%d)\n", 
+           config.test_image_size, config.test_image_size, config.test_image_size);
     
-    printf("Options:\n");
-    printf("  Multi-GPU: %s\n", use_multi_gpu ? "Enabled" : "Disabled");
-    printf("  Output: %s\n", output_file);
-    printf("  Input: %s\n", input_file ? input_file : "(generated)");
-    
-    performFFTReconstruction(input_file, output_file, use_multi_gpu);
+    performFFTReconstruction(&config);
     
     return 0;
 }

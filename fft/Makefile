@@ -2,7 +2,7 @@
 
 NVCC = nvcc
 CXX = g++
-CXXFLAGS = -std=c++11 -Wall -fopenmp
+CXXFLAGS = -std=c++11 -Wall -fPIC -fopenmp
 NVCCFLAGS = -ccbin /opt/gcc-5/bin/gcc -arch=sm_30 -std=c++11 -Xcompiler -fopenmp
 
 # CUDA paths
@@ -14,32 +14,40 @@ CUDA_INCLUDE = $(CUDA_PATH)/include
 CUFFT_LIB = -L$(CUDA_LIB) -lcufft_static -lculibos
 CUFFT_INCLUDE = -I$(CUDA_INCLUDE)
 
+# Common source files
+COMMON_SRC = fft_common.cpp
+COMMON_OBJ = fft_common.o
+
 # Build targets
 TARGETS = fft_2d_multi_gpu fft_batch_processing
 
 all: $(TARGETS)
 
-fft_2d_multi_gpu: fft_2d_multi_gpu.cu
+# Compile common functionality
+$(COMMON_OBJ): $(COMMON_SRC)
+	$(CXX) $(CXXFLAGS) $(CUFFT_INCLUDE) -c $< -o $@
+
+fft_2d_multi_gpu: $(COMMON_OBJ) fft_2d_multi_gpu.cu
 	$(NVCC) $(NVCCFLAGS) $(CUFFT_INCLUDE) \
-	        fft_2d_multi_gpu.cu -o fft_2d_multi_gpu \
+	        fft_2d_multi_gpu.cu $(COMMON_OBJ) -o fft_2d_multi_gpu \
 	        $(CUFFT_LIB) -lcuda -lcudart
 
-fft_batch_processing: fft_batch_processing.cu
+fft_batch_processing: $(COMMON_OBJ) fft_batch_processing.cu
 	$(NVCC) $(NVCCFLAGS) $(CUFFT_INCLUDE) \
-	        fft_batch_processing.cu -o fft_batch_processing \
+	        fft_batch_processing.cu $(COMMON_OBJ) -o fft_batch_processing \
 	        $(CUFFT_LIB) -lcuda -lcudart
 
 clean:
 	rm -f $(TARGETS) *.o *.ppm
 
 run: fft_2d_multi_gpu
-	./fft_2d_multi_gpu -o reconstruction.ppm
+	FFT_OUTPUT_FILE=reconstruction.ppm ./fft_2d_multi_gpu
 
 run-multi: fft_2d_multi_gpu
-	./fft_2d_multi_gpu -m -o reconstruction_multi.ppm
+	FFT_USE_MULTI_GPU=1 FFT_OUTPUT_FILE=reconstruction_multi.ppm ./fft_2d_multi_gpu
 
 run-batch: fft_batch_processing
-	./fft_batch_processing 4 256 256
+	FFT_BATCH_SIZE=4 FFT_IMAGE_WIDTH=256 FFT_IMAGE_HEIGHT=256 ./fft_batch_processing
 
 help:
 	@echo "Usage: make [target]"
@@ -47,7 +55,9 @@ help:
 	@echo "Targets:"
 	@echo "  all            - Build all FFT programs"
 	@echo "  clean          - Remove build artifacts"
-	@echo "  run            - Build and run single GPU FFT"
+	@echo "  run            - Build and run single GPU FFT (environment variable: FFT_OUTPUT_FILE)"
+	@echo "  run-multi      - Build and run multi-GPU FFT (environment variables: FFT_USE_MULTI_GPU, FFT_OUTPUT_FILE)"
+	@echo "  run-batch      - Build and run batch processing (environment variables: FFT_BATCH_SIZE, FFT_IMAGE_WIDTH, FFT_IMAGE_HEIGHT)"
 	@echo "  run-multi      - Build and run multi-GPU FFT"
 	@echo "  run-batch      - Build and run batch FFT processing"
 	@echo ""

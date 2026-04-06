@@ -8,22 +8,10 @@
  * 4. Performance measurement
  */
 
+#include "fft_common.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
-#include <sys/time.h>
-#include <cuda_runtime.h>
-#include <cufft.h>
-
-#define PI 3.14159265359f
-
-// Utility: Get current time in milliseconds
-double getCurrentMs() {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return tv.tv_sec * 1000.0 + tv.tv_usec / 1000.0;
-}
 
 // Kernel to create a test pattern
 __global__ void createTestPattern(cufftComplex *data, int width, int height, 
@@ -323,17 +311,16 @@ int main(int argc, char *argv[]) {
         printf("  GPU %d: %s (Compute %d.%d)\n", i, prop.name, prop.major, prop.minor);
     }
     
-    // Parse arguments
-    int batch_size = 4;
-    int image_width = 512;
-    int image_height = 512;
+    // Load configuration from environment variables
+    BatchConfig config = loadBatchConfig();
     
-    if (argc > 1) batch_size = atoi(argv[1]);
-    if (argc > 2) image_width = atoi(argv[2]);
-    if (argc > 3) image_height = atoi(argv[3]);
+    printf("\nConfiguration (from environment variables):\n");
+    printf("  Batch size: %d (FFT_BATCH_SIZE)\n", config.batch_size);
+    printf("  Image width: %d (FFT_IMAGE_WIDTH)\n", config.image_width);
+    printf("  Image height: %d (FFT_IMAGE_HEIGHT)\n", config.image_height);
     
     // Run multi-GPU batch processing
-    multiGPUBatchProcessing(num_gpus, batch_size, image_width, image_height);
+    multiGPUBatchProcessing(num_gpus, config.batch_size, config.image_width, config.image_height);
     
     printf("\nProcessing complete!\n");
     
