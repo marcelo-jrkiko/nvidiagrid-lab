@@ -149,7 +149,7 @@ void performFFTReconstruction(const FFTConfig *config) {
     }
     
     
-    int num_gpus = getAvailableGPUs();
+    int num_gpus = config->max_gpus;
     printf("Available GPUs: %d\n", num_gpus);
     
     if (num_gpus == 0) {

@@ -31,6 +31,7 @@ typedef struct {
     const char *input_file;
     const char *output_file;
     int test_image_size; // Added to specify size of generated test image
+    int max_gpus; // Maximum number of GPUs to use in multi-GPU mode
 } FFTConfig;
 
 // Configuration struct for batch processing

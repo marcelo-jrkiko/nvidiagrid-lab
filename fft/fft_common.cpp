@@ -297,6 +297,7 @@ FFTConfig loadFFTConfig() {
     config.input_file = NULL;
     config.output_file = "fft_output.ppm";
     config.test_image_size = 256;
+    config.max_gpus = 1; // Default max GPUs to use
     
     // Load use_multi_gpu from environment
     const char *env_multi_gpu = getenv("FFT_USE_MULTI_GPU");
@@ -320,6 +321,15 @@ FFTConfig loadFFTConfig() {
     const char *env_output = getenv("FFT_OUTPUT_FILE");
     if (env_output != NULL) {
         config.output_file = env_output;
+    }
+
+    // Load max GPUs to use from environment
+    const char *env_max_gpus = getenv("FFT_MAX_GPUS");
+    if (env_max_gpus != NULL) {
+        config.max_gpus = atoi(env_max_gpus);
+    }
+    else {
+        config.max_gpus = getAvailableGPUs(); // Default to all available GPUs if not set
     }
     
     return config;
