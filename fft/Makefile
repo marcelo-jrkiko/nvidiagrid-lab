@@ -37,9 +37,9 @@ fft_batch_processing: $(COMMON_OBJ) fft_batch_processing.cu
 	        fft_batch_processing.cu $(COMMON_OBJ) -o fft_batch_processing \
 	        $(CUFFT_LIB) -lcuda -lcudart
 
-generate_ppm_gpu: generate_ppm_gpu.cu
-	$(NVCC) $(NVCCFLAGS) -lcurand -lcuda -lcudart \
-	        generate_ppm_gpu.cu -o generate_ppm_gpu
+generate_ppm_gpu: $(COMMON_OBJ) generate_ppm_gpu.cu
+	$(NVCC) $(NVCCFLAGS) $(CUFFT_INCLUDE)  -lcurand -lcuda -lcudart \
+	        generate_ppm_gpu.cu $(COMMON_OBJ) -o generate_ppm_gpu
 
 clean:
 	rm -f $(TARGETS) *.o *.ppm
