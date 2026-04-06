@@ -15,7 +15,7 @@ CUFFT_LIB = -L$(CUDA_LIB) -lcufft_static -lculibos
 CUFFT_INCLUDE = -I$(CUDA_INCLUDE)
 
 # Common source files
-COMMON_SRC = fft_common.cpp
+COMMON_SRC = fft_common.cu
 COMMON_OBJ = fft_common.o
 
 # Build targets
@@ -23,9 +23,9 @@ TARGETS = fft_2d_multi_gpu fft_batch_processing
 
 all: $(TARGETS)
 
-# Compile common functionality
+# Compile common functionality with CUDA compiler
 $(COMMON_OBJ): $(COMMON_SRC)
-	$(CXX) $(CXXFLAGS) $(CUFFT_INCLUDE) -c $< -o $@
+	$(NVCC) $(NVCCFLAGS) $(CUFFT_INCLUDE) -c $< -o $@
 
 fft_2d_multi_gpu: $(COMMON_OBJ) fft_2d_multi_gpu.cu
 	$(NVCC) $(NVCCFLAGS) $(CUFFT_INCLUDE) \
