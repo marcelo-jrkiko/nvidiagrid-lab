@@ -19,7 +19,7 @@ COMMON_SRC = fft_common.cu
 COMMON_OBJ = fft_common.o
 
 # Build targets
-TARGETS = fft_2d_multi_gpu fft_batch_processing
+TARGETS = fft_2d_multi_gpu fft_batch_processing generate_ppm_gpu
 
 all: $(TARGETS)
 
@@ -37,6 +37,10 @@ fft_batch_processing: $(COMMON_OBJ) fft_batch_processing.cu
 	        fft_batch_processing.cu $(COMMON_OBJ) -o fft_batch_processing \
 	        $(CUFFT_LIB) -lcuda -lcudart
 
+generate_ppm_gpu: generate_ppm_gpu.cu
+	$(NVCC) $(NVCCFLAGS) -lcurand -lcuda -lcudart \
+	        generate_ppm_gpu.cu -o generate_ppm_gpu
+
 clean:
 	rm -f $(TARGETS) *.o *.ppm
 
@@ -49,17 +53,19 @@ run-multi: fft_2d_multi_gpu
 run-batch: fft_batch_processing
 	FFT_BATCH_SIZE=4 FFT_IMAGE_WIDTH=256 FFT_IMAGE_HEIGHT=256 ./fft_batch_processing
 
+run-generate: generate_ppm_gpu
+	PPM_WIDTH=1024 PPM_HEIGHT=1024 PPM_OUTPUT_FILE=generated.ppm ./generate_ppm_gpu
+
 help:
 	@echo "Usage: make [target]"
 	@echo ""
 	@echo "Targets:"
-	@echo "  all            - Build all FFT programs"
+	@echo "  all            - Build all programs"
 	@echo "  clean          - Remove build artifacts"
 	@echo "  run            - Build and run single GPU FFT (environment variable: FFT_OUTPUT_FILE)"
 	@echo "  run-multi      - Build and run multi-GPU FFT (environment variables: FFT_USE_MULTI_GPU, FFT_OUTPUT_FILE)"
 	@echo "  run-batch      - Build and run batch processing (environment variables: FFT_BATCH_SIZE, FFT_IMAGE_WIDTH, FFT_IMAGE_HEIGHT)"
-	@echo "  run-multi      - Build and run multi-GPU FFT"
-	@echo "  run-batch      - Build and run batch FFT processing"
+	@echo "  run-generate   - Build and run GPU PPM image generator (environment variables: PPM_WIDTH, PPM_HEIGHT, PPM_OUTPUT_FILE)"
 	@echo ""
 	@echo "Program 1: fft_2d_multi_gpu"
 	@echo "  ./fft_2d_multi_gpu [options]"
@@ -72,5 +78,12 @@ help:
 	@echo "    batch_size: images per GPU (default: 4)"
 	@echo "    width:      image width (default: 512)"
 	@echo "    height:     image height (default: 512)"
+	@echo ""
+	@echo "Program 3: generate_ppm_gpu"
+	@echo "  ./generate_ppm_gpu (reads environment variables from .env)"
+	@echo "    PPM_OUTPUT_FILE: Output filename (default: generated_image.ppm)"
+	@echo "    PPM_WIDTH:       Image width (default: 1024)"
+	@echo "    PPM_HEIGHT:      Image height (default: 1024)"
+	@echo "    PPM_SEED:        Random seed (default: current time)
 
-.PHONY: all clean run run-multi help
+.PHONY: all clean run run-multi run-batch run-generate help
