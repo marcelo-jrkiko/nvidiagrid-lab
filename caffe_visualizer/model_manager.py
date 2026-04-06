@@ -102,28 +102,89 @@ class CaffeModelManager:
     
     def _discover_gan_models(self, proto_files: Dict, model_files: Dict):
         """Discover GAN model pairs (generator + discriminator)."""
-        # Look for GAN model patterns
         gan_pattern = re.compile(r'(generator|discriminator)', re.IGNORECASE)
+        processed_proto_files = set()
+        
+        # First pass: Look for direct generator.prototxt + discriminator.prototxt pairs in same directory
+        # This handles the common case where GAN training outputs are directly named
+        for gen_filename, gen_filepath in proto_files.items():
+            if re.search(r'generator.*\.prototxt', gen_filename, re.IGNORECASE):
+                gen_dir = os.path.dirname(gen_filepath)
+                
+                # Look for matching discriminator in the same directory
+                for disc_filename, disc_filepath in proto_files.items():
+                    if re.search(r'discriminator.*\.prototxt', disc_filename, re.IGNORECASE):
+                        disc_dir = os.path.dirname(disc_filepath)
+                        
+                        if gen_dir == disc_dir:  # Same directory - this is a GAN pair!
+                            gan_name = "GAN"
+                            gen_model = None
+                            disc_model = None
+                            iteration = 0
+                            
+                            # Try to find matching model files with flexible patterns
+                            for model_filename, model_filepath in model_files.items():
+                                # Look for generator model files (any .caffemodel with generator or simple gan_model_iter_ pattern)
+                                if (re.search(r'generator', model_filename, re.IGNORECASE) and 
+                                    model_filename.endswith('.caffemodel')):
+                                    gen_model = model_filepath
+                                    match = re.search(r'iter_(\d+)', model_filename)
+                                    if match:
+                                        iteration = max(iteration, int(match.group(1)))
+                                
+                                # For model files that don't have generator/discriminator but have gan_model and iter
+                                elif (re.search(r'gan_model', model_filename, re.IGNORECASE) and 
+                                      model_filename.endswith('.caffemodel') and
+                                      not re.search(r'discriminator|disc', model_filename, re.IGNORECASE)):
+                                    # This is likely the generator model
+                                    if gen_model is None or 'generator' not in gen_model.lower():
+                                        gen_model = model_filepath
+                                        match = re.search(r'iter_(\d+)', model_filename)
+                                        if match:
+                                            iteration = max(iteration, int(match.group(1)))
+                                
+                                # Look for discriminator model files
+                                if ((re.search(r'discriminator', model_filename, re.IGNORECASE) or
+                                     re.search(r'disc', model_filename, re.IGNORECASE)) and 
+                                    model_filename.endswith('.caffemodel')):
+                                    disc_model = model_filepath
+                            
+                            gen_size = os.path.getsize(gen_model) / (1024 * 1024) if gen_model else 0.0
+                            disc_size = os.path.getsize(disc_model) / (1024 * 1024) if disc_model else 0.0
+                            
+                            gan_info = GANModelInfo(
+                                name=gan_name,
+                                generator_proto=gen_filepath,
+                                generator_model=gen_model,
+                                discriminator_proto=disc_filepath,
+                                discriminator_model=disc_model,
+                                generator_size_mb=round(gen_size, 2),
+                                discriminator_size_mb=round(disc_size, 2),
+                                total_size_mb=round(gen_size + disc_size, 2),
+                                iteration=iteration
+                            )
+                            self.gan_models[gan_name] = gan_info
+                            logging.info(f"Discovered GAN model: {gan_name} at {gen_dir}")
+                            
+                            # Mark these proto files as processed
+                            processed_proto_files.add(gen_filepath)
+                            processed_proto_files.add(disc_filepath)
+        
+        # Second pass: Look for models with generator/discriminator patterns
+        # This handles naming patterns where generator/discriminator appear in the filename
         gan_candidates = set()
         
-        # Check in proto files
+        # Collect candidates from remaining proto files
         for filename in proto_files.keys():
-            if gan_pattern.search(filename):
-                # Extract base name (e.g., from "generator.prototxt" or "generator_iter_1000.caffemodel")
-                base_name = re.sub(r'_(generator|discriminator|iter_\d+)', '', filename, flags=re.IGNORECASE)
-                base_name = re.sub(r'(\.prototxt|\.caffemodel|\.solverstate|\.weights)', '', base_name)
-                if base_name:
+            filepath = proto_files[filename]
+            if filepath not in processed_proto_files and gan_pattern.search(filename):
+                # Extract base name (e.g., from "my_gan_generator.prototxt")
+                base_name = re.sub(r'_(generator|discriminator)', '', filename, flags=re.IGNORECASE)
+                base_name = re.sub(r'(\.prototxt|\.caffemodel)', '', base_name)
+                if base_name and base_name.lower() not in ['generator', 'discriminator']:
                     gan_candidates.add(base_name)
         
-        # Check in model files
-        for filename in model_files.keys():
-            if gan_pattern.search(filename):
-                base_name = re.sub(r'_(generator|discriminator|iter_\d+)', '', filename, flags=re.IGNORECASE)
-                base_name = re.sub(r'(\.prototxt|\.caffemodel|\.solverstate|\.weights)', '', base_name)
-                if base_name:
-                    gan_candidates.add(base_name)
-        
-        # For each candidate, try to find matching generator and discriminator files
+        # For each candidate, find matching generator and discriminator files
         for base_name in gan_candidates:
             gen_proto = None
             gen_model = None
@@ -131,41 +192,50 @@ class CaffeModelManager:
             disc_model = None
             iteration = 0
             
-            # Find generator files
+            # Find generator proto
             for filename, filepath in proto_files.items():
-                if re.search(r'generator.*\.prototxt', filename, re.IGNORECASE):
-                    if base_name.lower() in filename.lower() or filename.lower().startswith('generator'):
-                        gen_proto = filepath
+                if filepath in processed_proto_files:
+                    continue
+                if (re.search(r'generator', filename, re.IGNORECASE) and 
+                    base_name.lower() in filename.lower() and 
+                    filename.endswith('.prototxt')):
+                    gen_proto = filepath
             
-            for filename, filepath in model_files.items():
-                if re.search(r'generator.*\.caffemodel', filename, re.IGNORECASE):
-                    if base_name.lower() in filename.lower() or filename.lower().startswith('generator'):
-                        gen_model = filepath
-                        # Extract iteration number if present
-                        match = re.search(r'iter_(\d+)', filename)
-                        if match:
-                            iteration = int(match.group(1))
-            
-            # Find discriminator files
+            # Find discriminator proto
             for filename, filepath in proto_files.items():
-                if re.search(r'discriminator.*\.prototxt', filename, re.IGNORECASE):
-                    if base_name.lower() in filename.lower() or filename.lower().startswith('discriminator'):
-                        disc_proto = filepath
+                if filepath in processed_proto_files:
+                    continue
+                if ((re.search(r'discriminator', filename, re.IGNORECASE) or
+                     re.search(r'disc_', filename, re.IGNORECASE)) and 
+                    base_name.lower() in filename.lower() and 
+                    filename.endswith('.prototxt')):
+                    disc_proto = filepath
             
+            # Find generator model
             for filename, filepath in model_files.items():
-                if re.search(r'discriminator.*\.caffemodel', filename, re.IGNORECASE):
-                    if base_name.lower() in filename.lower() or filename.lower().startswith('discriminator'):
-                        disc_model = filepath
+                if (re.search(r'generator', filename, re.IGNORECASE) and 
+                    base_name.lower() in filename.lower() and 
+                    filename.endswith('.caffemodel')):
+                    gen_model = filepath
+                    match = re.search(r'iter_(\d+)', filename)
+                    if match:
+                        iteration = max(iteration, int(match.group(1)))
             
-            # Create GAN model info if we have at least prototxt files
+            # Find discriminator model
+            for filename, filepath in model_files.items():
+                if ((re.search(r'discriminator', filename, re.IGNORECASE) or
+                     re.search(r'disc_', filename, re.IGNORECASE)) and 
+                    base_name.lower() in filename.lower() and 
+                    filename.endswith('.caffemodel')):
+                    disc_model = filepath
+            
+            # Create GAN model info only if we have both prototxt files
             if gen_proto and disc_proto:
-                gan_name = base_name if base_name else "GAN"
-                
                 gen_size = os.path.getsize(gen_model) / (1024 * 1024) if gen_model else 0.0
                 disc_size = os.path.getsize(disc_model) / (1024 * 1024) if disc_model else 0.0
                 
                 gan_info = GANModelInfo(
-                    name=gan_name,
+                    name=base_name,
                     generator_proto=gen_proto,
                     generator_model=gen_model,
                     discriminator_proto=disc_proto,
@@ -175,18 +245,18 @@ class CaffeModelManager:
                     total_size_mb=round(gen_size + disc_size, 2),
                     iteration=iteration
                 )
-                self.gan_models[gan_name] = gan_info
+                self.gan_models[base_name] = gan_info
+                logging.info(f"Discovered GAN model: {base_name}")
                 
-                logging.info(f"Discovered GAN model: {gan_name}")
-                # Remove these files from consideration for standard model discovery
-                if gen_proto in proto_files.values():
-                    proto_files = {k: v for k, v in proto_files.items() if v != gen_proto}
-                if disc_proto in proto_files.values():
-                    proto_files = {k: v for k, v in proto_files.items() if v != disc_proto}
-                if gen_model in model_files.values():
-                    model_files = {k: v for k, v in model_files.items() if v != gen_model}
-                if disc_model in model_files.values():
-                    model_files = {k: v for k, v in model_files.items() if v != disc_model}
+                # Mark as processed
+                processed_proto_files.add(gen_proto)
+                processed_proto_files.add(disc_proto)
+        
+        # Remove discovered GAN proto files from the proto_files dict for standard model discovery
+        for filepath in processed_proto_files:
+            proto_files_to_remove = [k for k, v in proto_files.items() if v == filepath]
+            for k in proto_files_to_remove:
+                del proto_files[k]
     
     def _discover_standard_models(self, proto_files: Dict, model_files: Dict):
         """Discover standard (non-GAN) models."""

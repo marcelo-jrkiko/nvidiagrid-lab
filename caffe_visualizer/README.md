@@ -39,10 +39,13 @@ mkdir models
 ### Starting the Server
 
 ```bash
-# Default models folder: ./models
+# Default models folder: ./results
 python app.py
 
-# Or specify a custom models folder:
+# Or specify a custom results/models folder:
+RESULTS_FOLDER=/path/to/results python app.py
+
+# Alternative env var (for backwards compatibility):
 CAFFE_MODELS_PATH=/path/to/models python app.py
 ```
 

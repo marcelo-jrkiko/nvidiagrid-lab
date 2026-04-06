@@ -21,7 +21,8 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 load_dotenv()  # Load environment variables from .env file if it exists
 
 # Initialize model manager with default models folder
-MODELS_FOLDER = os.environ.get('RESULTS_FOLDER', './results')
+# Support both RESULTS_FOLDER and CAFFE_MODELS_PATH for flexibility
+MODELS_FOLDER = os.environ.get('RESULTS_FOLDER') or os.environ.get('CAFFE_MODELS_PATH', './results')
 model_manager = CaffeModelManager(MODELS_FOLDER)
 visualizer = CaffeVisualizer()
 
