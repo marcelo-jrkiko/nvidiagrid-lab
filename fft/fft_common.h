@@ -2,6 +2,7 @@
 #define FFT_COMMON_H
 
 #include <cuda_runtime.h>
+#include <curand_kernel.h>
 #include <cufft.h>
 
 #define PI 3.14159265359f
